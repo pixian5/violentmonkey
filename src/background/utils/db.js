@@ -800,7 +800,9 @@ async function fetchResource(src, type, url) {
 function postToPort(ports, id, msg) {
   let p = ports[id];
   if (!p) {
-    p = ports[id] = chrome.runtime.connect({ name: id });
+    const connect = globalThis.browser?.runtime?.connect || globalThis.chrome?.runtime?.connect;
+    if (!connect) return;
+    p = ports[id] = connect({ name: id });
     p.onDisconnect.addListener(() => {
       ignoreChromeErrors();
       delete ports[id];
