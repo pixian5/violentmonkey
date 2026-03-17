@@ -46,6 +46,8 @@ const debugLabel = `导入调试: TARGET=${process.env.TARGET || 'unknown'} `
   + `时间=${new Date().toLocaleTimeString()}`;
 const IMPORT_PORT_NAME = 'importScript';
 const IMPORT_CHUNK_SIZE = 64 * 1024;
+const VALUE_BATCH_BYTES = 256 * 1024;
+const VALUE_BATCH_COUNT = 10;
 const i18nConfirmUndoImport = i18n('confirmUndoImport');
 const labelImportScriptData = i18n('labelImportScriptData');
 const labelImportSettings = i18n('labelImportSettings');
@@ -234,11 +236,7 @@ async function doImportBackup(file) {
   if (importScriptData) {
     reportDebug('处理 .storage.json');
     await processAll(readScriptStorage, '.storage.json');
-    await withTimeout(
-      sendCmdDirectly('SetValueStores', values, { retry: true, bgTimeout: 1200 }),
-      15000,
-      'SetValueStores 超时'
-    );
+    await sendValueStoresBatched(values);
   }
   if (isObject(importSettings)) {
     delete importSettings.sync;
@@ -386,6 +384,45 @@ async function doImportBackup(file) {
   async function readScriptStorage(entry, json, name) {
     reports[0].text = 'Tampermonkey';
     values[uriMap[name]] = json.data;
+  }
+  async function sendValueStoresBatched(data) {
+    const entries = Object.entries(data);
+    const total = entries.length;
+    if (!total) return;
+    reportDebug(`写入脚本数据: ${total}`);
+    let batch = {};
+    let batchBytes = 0;
+    let sent = 0;
+    const flush = async () => {
+      const payload = batch;
+      batch = {};
+      batchBytes = 0;
+      await withTimeout(
+        sendCmdDirectly('SetValueStores', payload, { retry: true, bgTimeout: 1200 }),
+        20000,
+        `SetValueStores 超时 (${sent}/${total})`
+      );
+      await makePause(0);
+    };
+    for (const [key, store] of entries) {
+      let size = 0;
+      try { size = JSON.stringify(store).length; } catch (e) {}
+      const approx = String(key).length + size + 8;
+      if (batchBytes && (
+        batchBytes + approx > VALUE_BATCH_BYTES
+        || Object.keys(batch).length >= VALUE_BATCH_COUNT
+      )) {
+        await flush();
+        reportDebug(`写入脚本数据进度: ${sent}/${total}`);
+      }
+      batch[key] = store;
+      batchBytes += approx;
+      sent += 1;
+    }
+    if (Object.keys(batch).length) {
+      await flush();
+    }
+    reportDebug(`写入脚本数据完成: ${sent}/${total}`);
   }
   function reportProgress(filename = '') {
     const count = Object.keys(uriMap).length;
