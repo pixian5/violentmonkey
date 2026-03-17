@@ -24,6 +24,7 @@ render(App);
  * @param {string} [code]
  */
 function initScript(script, sizes, code) {
+  sizes = Array.isArray(sizes) ? sizes : [];
   const $cache = script.$cache || (script.$cache = {});
   const meta = script.meta || {};
   const { custom } = script;
@@ -51,7 +52,7 @@ function initScript(script, sizes, code) {
   $cache.sizes = formatSizesStr(str);
   $cache.sizeNum = total;
   $cache.sizesNum = sizes;
-  $cache[kStorageSize] = sizes[2];
+  $cache[kStorageSize] = sizes[2] || 0;
   if (code) $cache.code = code;
   script.$canUpdate = getScriptUpdateUrl(script)
     && (script.config.shouldUpdate ? 1 : -1 /* manual */);
@@ -71,7 +72,7 @@ async function requestData(id) {
     sendCmdDirectly('GetData', { id, sizes: true }, { retry: true }),
     options.ready,
   ]);
-  const { scripts: allScripts, sizes, ...auxData } = data;
+  const { scripts: allScripts = [], sizes = [], ...auxData } = data || {};
   Object.assign(store, auxData); // initScripts needs `cache` in store
   const scripts = [];
   const removedScripts = [];
@@ -97,6 +98,7 @@ function initMain() {
     },
     async UpdateScript({ update, where, code } = {}) {
       if (!update) return;
+      if (!where?.id) return;
       if (updateThrottle
       || (updateThrottle = store.batch)
       && (updateThrottle = Promise.race([updateThrottle, makePause(500)]))) {
@@ -112,7 +114,12 @@ function initMain() {
       if (!script) return; // We're in editor that doesn't have data for all scripts
       const removed = update.config?.removed;
       const oldTags = oldScript?.custom.tags;
-      const [sizes] = await sendCmdDirectly('GetSizes', [where.id]);
+      let sizes;
+      try {
+        [sizes] = await sendCmdDirectly('GetSizes', [where.id]);
+      } catch (e) {
+        sizes = [];
+      }
       const { search } = store;
       Object.assign(script, update);
       if (script.error && !update.error) script.error = null;
