@@ -4,7 +4,6 @@ import {
   getScriptUpdateUrl,
   trueJoin,
 } from '@/common';
-import { SCRIPTS } from '@/common/safe-globals-shared';
 import { loadScriptIcon } from '@/common/load-script-icon';
 import {
   formatSizesStr,
@@ -64,7 +63,7 @@ export function initScript(script, sizes, code) {
  * @return {{ scripts: VMScript[], removedScripts: VMScript[] }}
  */
 export function applyScriptsData(data, loadedId) {
-  const { [SCRIPTS]: allScripts = [], sizes = [], ...auxData } = data || {};
+  const { scripts: allScripts = [], sizes = [], ...auxData } = data || {};
   Object.assign(store, auxData); // initScript needs `cache` in store
   const scripts = [];
   const removedScripts = [];
