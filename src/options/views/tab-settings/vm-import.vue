@@ -94,7 +94,7 @@ async function doImportBackup(file) {
   let depsDone = 0;
   let depsTotal = 0;
   depsPortId = getUniqId();
-  chrome.runtime.onConnect.addListener(port => {
+  browser.runtime.onConnect.addListener(port => {
     if (port.name !== depsPortId) return;
     port.onMessage.addListener(([url, done]) => {
       if (done) ++depsDone; else ++depsTotal;
@@ -110,7 +110,7 @@ async function doImportBackup(file) {
   });
   if (!undoPort) {
     now = ' ⯈ ' + new Date().toLocaleTimeString();
-    undoPort = chrome.runtime.connect({ name: 'undoImport' });
+    undoPort = browser.runtime.connect({ name: 'undoImport' });
     await new Promise(resolveOnUndoMessage);
   }
   await processAll(readScriptOptions, '.options.json');
