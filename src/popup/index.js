@@ -115,7 +115,12 @@ function initMutex(delay = 100) {
 async function initialize() {
   initMutex();
   Object.assign(store, emptyStore());
-  let [cached, data, [failure, reason, reason2]] = await sendCmdDirectly('InitPopup');
+  const response = await sendCmdDirectly('InitPopup');
+  let [cached, data, failureInfo] = Array.isArray(response) ? response : [];
+  let [failure, reason, reason2] = Array.isArray(failureInfo)
+    ? failureInfo
+    : failureInfo == null ? [] : [failureInfo];
+  data ||= {};
   if (!reason) {
     failure = '';
   } else if (reason === INJECT_INTO) {
@@ -137,7 +142,7 @@ async function initialize() {
     for (const id in cached) handlers.SetPopup(...cached[id]);
   }
   if (!port) {
-    port = browser.runtime.connect({ name: `Popup:${cached ? 'C' : ''}:${data.tab.id}` });
+    port = browser.runtime.connect({ name: `Popup:${cached ? 'C' : ''}:${data.tab?.id ?? ''}` });
     port.onMessage.addListener(initialize); // for non-injectable tab
   }
 }
