@@ -25,7 +25,7 @@
         class="menu-area"
         :data-message="i18n('menuDashboard') + '\n' + i18n('popupSettingsHint')"
         :tabIndex
-        @contextmenu.prevent="showSettings = !showSettings"
+        @contextmenu.prevent="onPopupSettings"
         @auxclick="$event.button !== 2 && onManage($event)"
         @click="onManage">
         <icon name="cog"></icon>
@@ -60,7 +60,7 @@
       <span v-text="store.failureText"/>
       <code v-text="store.blacklisted" v-if="store.blacklisted" class="ellipsis inline-block"/>
     </div>
-    <div v-if="showSettings" class="mb-1c menu settings">
+    <div v-if="showSettings && !IS_SAFARI" class="mb-1c menu settings">
       <settings-popup/>
       <button v-text="i18n('buttonClose')" @click="showSettings = false"/>
     </div>
@@ -192,7 +192,7 @@
     <div class="message" v-if="message" v-text="message"/>
     <div v-show="topExtras" ref="$topExtras" class="extras-menu">
       <div v-text="i18n('labelSettings')" @click="onManage(1)" tabindex="0"/>
-      <div v-text="i18n('popupSettings')" @click="showSettings = true" tabindex="0"/>
+      <div v-text="i18n('popupSettings')" @click="onPopupSettings" tabindex="0"/>
       <div v-text="i18n('updateListedCmd', `${Object.keys(store.updatableScripts).length}`)"
            @click="onUpdateListed" tabindex="0"
            v-if="store.updatableScripts"/>
@@ -238,6 +238,7 @@ import { isFullscreenPopup, store } from '../utils';
 
 let mousedownElement;
 let focusBug;
+const IS_SAFARI = process.env.TARGET === 'safari';
 const HOME = extensionManifest.homepage_url.split('/')[2];
 const NAME = `${extensionManifest.name} ${process.env.VM_VER}`;
 const TARDY_MATCH = i18n('msgTardyMatch');
@@ -417,6 +418,10 @@ function onToggle() {
 }
 /** @param {number | MouseEvent} evt - index of tab to open in src/options/views/app.vue */
 function onManage(evt) {
+  if (IS_SAFARI) {
+    openExtensionPage(browser.runtime.getURL('/options/index.html'));
+    return;
+  }
   sendCmdDirectly('OpenDashboard',
     evt === 1 || evt.button === 1 || evt.ctrlKey ? TAB_SETTINGS : '')
   .then(close);
@@ -466,7 +471,40 @@ function checkReload() {
   }
 }
 function onCreateScript() {
+  if (IS_SAFARI) {
+    openExtensionPage(browser.runtime.getURL('/options/index.html#scripts/_new'));
+    return;
+  }
   sendCmdDirectly('OpenEditor').then(close);
+}
+function onPopupSettings() {
+  if (IS_SAFARI) {
+    openExtensionPage(browser.runtime.getURL('/options/index.html#settings'));
+  } else {
+    showSettings.value = !showSettings.value;
+  }
+}
+function openExtensionPage(url) {
+  const openWithWindow = () => {
+    try {
+      return window.open(url, '_blank');
+    } catch (e) {
+      return null;
+    }
+  };
+  let openResult;
+  try {
+    const create = browser.tabs?.create;
+    if (create) openResult = create.call(browser.tabs, { url });
+  } catch (e) {
+    openResult = null;
+  }
+  if (!openResult || typeof openResult.then !== 'function') {
+    openResult = openResult || openWithWindow();
+    Promise.resolve(openResult).finally(close);
+    return;
+  }
+  openResult.catch(() => openWithWindow()).finally(close);
 }
 async function onInjectionFailureFix() {
   // TODO: promisify options.set, resolve on storage write, await it instead of makePause
