@@ -306,10 +306,18 @@ async function doImportBackup(file) {
         },
       },
     };
+    const codeKey = `import:code:${getUniqId()}`;
     try {
       reportDebug(`ParseScript: ${filename}`);
+      await withTimeout(
+        browser.storage.local.set({ [codeKey]: code }),
+        15000,
+        `保存脚本超时: ${filename}`
+      );
+      const payload = { ...data, codeKey };
+      delete payload.code;
       const result = await withTimeout(
-        sendCmdDirectly('ParseScript', data, { retry: true, bgTimeout: 1200 }),
+        sendCmdDirectly('ParseScriptFromStorage', payload, { retry: true, bgTimeout: 1200 }),
         60000,
         `ParseScript 超时: ${filename}`
       );
@@ -317,6 +325,7 @@ async function doImportBackup(file) {
       reportProgress(filename);
     } catch (e) {
       report(e, filename, 'script');
+      await browser.storage.local.remove(codeKey).catch(() => {});
     }
   }
   async function readScriptOptions(entry, json, name) {

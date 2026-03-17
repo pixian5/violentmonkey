@@ -75,6 +75,19 @@ addOwnCommands({
   GetScriptCode(id) {
     return storage[S_CODE][Array.isArray(id) ? 'getMulti' : 'getOne'](id);
   },
+  /** @return {Promise<ReturnType<typeof parseScript>>} */
+  async ParseScriptFromStorage(data = {}) {
+    const { codeKey, ...src } = data || {};
+    if (!codeKey) throw 'Missing codeKey';
+    let code;
+    try {
+      ({ [codeKey]: code } = await storage.api.get(codeKey));
+    } finally {
+      await storage.api.remove(codeKey).catch(() => {});
+    }
+    if (code == null) throw 'Code not found';
+    return parseScript({ ...src, code });
+  },
   GetTags: () => getScriptsTags(aliveScripts),
   /** @return {Promise<void>} */
   async MarkRemoved({ id, removed }) {
