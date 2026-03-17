@@ -21,6 +21,7 @@ async function buildManifest(base) {
       'notifications',
       'webRequestBlocking',
     ].includes(key));
+    delete data.commands?._execute_browser_action;
   }
   if (isBeta()) {
     // Do not support i18n in beta version
