@@ -71,7 +71,7 @@ async function requestData(id) {
     sendCmdDirectly('GetData', { id, sizes: true }, { retry: true }),
     options.ready,
   ]);
-  const { [SCRIPTS]: allScripts, sizes, ...auxData } = data;
+  const { scripts: allScripts, sizes, ...auxData } = data;
   Object.assign(store, auxData); // initScripts needs `cache` in store
   const scripts = [];
   const removedScripts = [];
@@ -134,7 +134,7 @@ function initMain() {
       const i = script.config.removed ? i2 : i1;
       if (i < 0) {
         script.message = '';
-        const list = script.config.removed ? 'removedScripts' : SCRIPTS;
+        const list = script.config.removed ? 'removedScripts' : 'scripts';
         store[list] = [...store[list], script];
       }
       if (store.tags && (
