@@ -41,7 +41,7 @@ export function initHooks() {
 /**
  * @param {string} cmd
  * @param data
- * @param {{retry?: boolean}} [options]
+ * @param {{retry?: boolean, bgTimeout?: number}} [options]
  * @return {Promise}
  */
 export function sendCmd(cmd, data, options) {
@@ -91,9 +91,29 @@ export function sendCmdDirectly(cmd, data, options, fakeSrc) {
     }
     return bg.handleCommandMessage(bgCopy({ cmd, data }), fakeSrc).then(deepCopy);
   };
-  return bgMaybe && typeof bgMaybe.then === 'function'
-    ? bgMaybe.then(handle, () => sendCmd(cmd, data, options))
-    : handle(bgMaybe);
+  if (bgMaybe && typeof bgMaybe.then === 'function') {
+    let done = false;
+    const fallback = () => {
+      if (done) return;
+      done = true;
+      return sendCmd(cmd, data, options);
+    };
+    const onResolve = bg => {
+      if (done) return;
+      done = true;
+      return handle(bg);
+    };
+    const onReject = () => fallback();
+    const timeout = options?.bgTimeout;
+    if (timeout > 0) {
+      return Promise.race([
+        bgMaybe.then(onResolve, onReject),
+        makePause(timeout).then(fallback),
+      ]);
+    }
+    return bgMaybe.then(onResolve, onReject);
+  }
+  return handle(bgMaybe);
 }
 
 /**

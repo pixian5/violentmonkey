@@ -81,11 +81,13 @@ async function importBackup(file) {
 async function doImportBackup(file) {
   if (!file) return;
   reports.length = 0;
+  reportDebug('开始导入');
   const importScriptData = options.get('importScriptData');
   const zip = await loadZipLibrary();
   const reader = new zip.ZipReader(new zip.BlobReader(file));
   const entries = await reader.getEntries().catch(report) || [];
   if (reports.length) return;
+  reportDebug(`读取条目数: ${entries.length}`);
   report('', file.name, 'info');
   report('', '', 'info'); // deps
   const uriMap = {};
@@ -118,21 +120,38 @@ async function doImportBackup(file) {
     undoPort = browser.runtime.connect({ name: 'undoImport' });
     const ready = await waitPortReady(undoPort);
     if (!ready) undoPort = null;
+    reportDebug(`undo端口: ${ready ? '就绪' : '超时'}`);
   }
+  reportDebug('处理 .options.json');
   await processAll(readScriptOptions, '.options.json');
+  reportDebug('处理 .user.js');
   await processAll(readScript, '.user.js');
   if (importScriptData) {
+    reportDebug('处理 .storage.json');
     await processAll(readScriptStorage, '.storage.json');
-    sendCmdDirectly('SetValueStores', values);
+    await withTimeout(
+      sendCmdDirectly('SetValueStores', values, { retry: true, bgTimeout: 1200 }),
+      15000,
+      'SetValueStores 超时'
+    );
   }
   if (isObject(importSettings)) {
     delete importSettings.sync;
-    sendCmdDirectly('SetOptions', importSettings);
+    await withTimeout(
+      sendCmdDirectly('SetOptions', importSettings, { retry: true, bgTimeout: 1200 }),
+      15000,
+      'SetOptions 超时'
+    );
   }
-  sendCmdDirectly('CheckPosition');
+  await withTimeout(
+    sendCmdDirectly('CheckPosition', null, { retry: true, bgTimeout: 1200 }),
+    15000,
+    'CheckPosition 超时'
+  );
   await reader.close();
   reportProgress();
   if (now && undoPort) undoTime.value = now;
+  reportDebug('导入完成');
 
   function parseJson(text, entry) {
     try {
@@ -179,7 +198,13 @@ async function doImportBackup(file) {
       },
     };
     try {
-      uriMap[name] = (await sendCmdDirectly('ParseScript', data)).update.props.uri;
+      reportDebug(`ParseScript: ${filename}`);
+      const result = await withTimeout(
+        sendCmdDirectly('ParseScript', data, { retry: true, bgTimeout: 1200 }),
+        15000,
+        `ParseScript 超时: ${filename}`
+      );
+      uriMap[name] = result.update.props.uri;
       reportProgress(filename);
     } catch (e) {
       report(e, filename, 'script');
@@ -220,6 +245,9 @@ async function doImportBackup(file) {
   }
   function report(text, name, type = 'critical') {
     reports.push({ text, name, type });
+  }
+  function reportDebug(text) {
+    report(text, '', 'debug');
   }
   function reportProgress(filename = '') {
     const count = Object.keys(uriMap).length;
@@ -263,6 +291,15 @@ function waitPortReady(port, timeout = 1500) {
       finish(false);
     });
   });
+}
+
+function withTimeout(promise, timeout, label) {
+  let timer;
+  const err = new Error(label || 'Timeout');
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(err), timeout);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 
 function initDragDrop(targetElement) {
@@ -337,10 +374,16 @@ button.drop-allowed {
   [data-type="info"] {
     color: blue;
   }
+  [data-type="debug"] {
+    color: #777;
+  }
   @media (prefers-color-scheme: dark) {
     color: #a83;
     [data-type="info"] {
       color: #fff;
+    }
+    [data-type="debug"] {
+      color: #bbb;
     }
   }
 }
