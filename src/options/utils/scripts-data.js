@@ -4,6 +4,7 @@ import {
   getScriptUpdateUrl,
   trueJoin,
 } from '@/common';
+import { SCRIPTS } from '@/common/safe-globals-shared';
 import { loadScriptIcon } from '@/common/load-script-icon';
 import {
   formatSizesStr,
