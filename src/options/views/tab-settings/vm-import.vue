@@ -27,6 +27,7 @@ import { RUN_AT_RE } from '@/common/consts';
 import options from '@/common/options';
 import loadZipLibrary from '@/common/zip';
 import { showConfirmation } from '@/common/ui';
+import { applyScriptsData } from '@/options/utils/scripts-data';
 import {
   kDownloadURL, kExclude, kInclude, kMatch, kOrigExclude, kOrigInclude, kOrigMatch,
   runInBatch, store,
@@ -251,6 +252,7 @@ async function doImportBackup(file) {
     15000,
     'CheckPosition 超时'
   );
+  await refreshAfterImport();
   await reader.close();
   reportProgress();
   if (now && undoPort) undoTime.value = now;
@@ -433,6 +435,17 @@ async function doImportBackup(file) {
   }
   function toStringArray(data) {
     return ensureArray(data).filter(item => typeof item === 'string');
+  }
+}
+
+async function refreshAfterImport() {
+  try {
+    await options.ready;
+    const data = await sendCmdDirectly('GetData', { sizes: true }, { retry: true });
+    const { scripts, removedScripts } = applyScriptsData(data);
+    reportDebug(`导入后脚本数: ${scripts.length}，回收站: ${removedScripts.length}`);
+  } catch (e) {
+    reportDebug(`导入后刷新失败: ${e?.message || e}`);
   }
 }
 
