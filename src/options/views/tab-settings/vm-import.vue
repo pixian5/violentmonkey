@@ -21,7 +21,7 @@
 </template>
 
 <script>
-import { ensureArray, getUniqId, i18n, sendCmdDirectly } from '@/common';
+import { ensureArray, getUniqId, i18n, makePause, sendCmdDirectly } from '@/common';
 import { listenOnce } from '@/common/browser';
 import { RUN_AT_RE } from '@/common/consts';
 import options from '@/common/options';
@@ -44,6 +44,8 @@ const showDebug = true;
 const debugLabel = `导入调试: TARGET=${process.env.TARGET || 'unknown'} `
   + `VM_VER=${process.env.VM_VER || 'n/a'} `
   + `时间=${new Date().toLocaleTimeString()}`;
+const IMPORT_PORT_NAME = 'importScript';
+const IMPORT_CHUNK_SIZE = 64 * 1024;
 const i18nConfirmUndoImport = i18n('confirmUndoImport');
 const labelImportScriptData = i18n('labelImportScriptData');
 const labelImportSettings = i18n('labelImportSettings');
@@ -306,27 +308,51 @@ async function doImportBackup(file) {
         },
       },
     };
-    const codeKey = `import:code:${getUniqId()}`;
     try {
       reportDebug(`ParseScript: ${filename}`);
-      await withTimeout(
-        browser.storage.local.set({ [codeKey]: code }),
-        15000,
-        `保存脚本超时: ${filename}`
-      );
-      const payload = { ...data, codeKey };
-      delete payload.code;
       const result = await withTimeout(
-        sendCmdDirectly('ParseScriptFromStorage', payload, { retry: true, bgTimeout: 1200 }),
-        60000,
+        parseScriptViaPort(data, code, filename),
+        120000,
         `ParseScript 超时: ${filename}`
       );
       uriMap[name] = result.update.props.uri;
       reportProgress(filename);
     } catch (e) {
       report(e, filename, 'script');
-      await browser.storage.local.remove(codeKey).catch(() => {});
     }
+  }
+
+  function parseScriptViaPort(data, code, filename) {
+    return new Promise((resolve, reject) => {
+      const port = browser.runtime.connect({ name: IMPORT_PORT_NAME });
+      let done = false;
+      const finish = (err, result) => {
+        if (done) return;
+        done = true;
+        try { port.disconnect(); } catch (e) {}
+        if (err) reject(err);
+        else resolve(result);
+      };
+      port.onMessage.addListener(msg => {
+        if (done) return;
+        if (msg?.ok) finish(null, msg.result);
+        else if (msg?.error) finish(new Error(msg.error));
+      });
+      port.onDisconnect.addListener(() => {
+        if (!done) finish(new Error(`导入端口断开: ${filename}`));
+      });
+      port.postMessage({ type: 'start', data: { ...data, code: undefined } });
+      (async () => {
+        const total = code.length;
+        for (let i = 0; i < total; i += IMPORT_CHUNK_SIZE) {
+          port.postMessage({ type: 'chunk', chunk: code.slice(i, i + IMPORT_CHUNK_SIZE) });
+          if (i && i % (IMPORT_CHUNK_SIZE * 8) === 0) {
+            await makePause(0);
+          }
+        }
+        port.postMessage({ type: 'end' });
+      })().catch(err => finish(err));
+    });
   }
   async function readScriptOptions(entry, json, name) {
     const { meta, settings = {}, options: opts } = json;

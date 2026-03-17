@@ -712,6 +712,47 @@ export async function parseScript(src) {
   return result;
 }
 
+const IMPORT_PORT_NAME = 'importScript';
+browser.runtime.onConnect.addListener(port => {
+  if (port.name !== IMPORT_PORT_NAME) return;
+  let data;
+  let chunks = [];
+  let done = false;
+  const finish = (msg) => {
+    if (done) return;
+    done = true;
+    try { port.postMessage(msg); } catch (e) {}
+    try { port.disconnect(); } catch (e) {}
+  };
+  port.onMessage.addListener(async msg => {
+    if (done) return;
+    try {
+      if (msg?.type === 'start') {
+        data = msg.data || {};
+        chunks = [];
+        return;
+      }
+      if (!data) return;
+      if (msg?.type === 'chunk') {
+        chunks.push(msg.chunk || '');
+        return;
+      }
+      if (msg?.type === 'end') {
+        const code = chunks.join('');
+        const result = await parseScript({ ...data, code });
+        finish({ ok: true, result });
+      }
+    } catch (err) {
+      finish({ error: err?.message || `${err}` });
+    }
+  });
+  port.onDisconnect.addListener(() => {
+    done = true;
+    data = null;
+    chunks = [];
+  });
+});
+
 /** @return {Object} */
 function buildPathMap(script, base) {
   const { meta } = script;
