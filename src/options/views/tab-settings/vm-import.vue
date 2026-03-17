@@ -65,7 +65,12 @@ function pickBackup() {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.zip';
-  input.onchange = () => importBackup(input.files?.[0]);
+  input.style.display = 'none';
+  input.onchange = () => {
+    importBackup(input.files?.[0]);
+    input.remove();
+  };
+  document.body.append(input);
   input.click();
 }
 
