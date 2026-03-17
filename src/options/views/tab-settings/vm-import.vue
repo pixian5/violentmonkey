@@ -263,14 +263,16 @@ async function doImportBackup(file) {
       report(e, entry.filename, null);
     }
   }
-  function processAll(transform, suffix) {
-    return Promise.all(entries.map(async entry => {
+  async function processAll(transform, suffix) {
+    for (const entry of entries) {
       const { filename } = entry;
       if (filename?.endsWith(suffix)) {
         const contents = await readContents(entry);
-        return contents && transform(entry, contents, filename.slice(0, -suffix.length));
+        if (contents) {
+          await transform(entry, contents, filename.slice(0, -suffix.length));
+        }
       }
-    }));
+    }
   }
   async function readContents(entry) {
     const text = await withTimeout(
@@ -308,7 +310,7 @@ async function doImportBackup(file) {
       reportDebug(`ParseScript: ${filename}`);
       const result = await withTimeout(
         sendCmdDirectly('ParseScript', data, { retry: true, bgTimeout: 1200 }),
-        15000,
+        60000,
         `ParseScript 超时: ${filename}`
       );
       uriMap[name] = result.update.props.uri;
