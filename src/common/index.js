@@ -69,23 +69,31 @@ const COMMANDS_WITH_SRC = [
   'SetPopup',
 */
 ];
-export const getBgPage = () => browser.extension.getBackgroundPage?.();
+export const getBgPage = () => (
+  browser.extension.getBackgroundPage?.()
+  || browser.runtime?.getBackgroundPage?.()
+);
 
 /**
  * Sends the command+data directly so it's synchronous and faster than sendCmd thanks to deepCopy.
  * WARNING! Make sure `cmd` handler doesn't use `src` or `cmd` is listed in COMMANDS_WITH_SRC.
  */
 export function sendCmdDirectly(cmd, data, options, fakeSrc) {
-  const bg = !COMMANDS_WITH_SRC.includes(cmd) && getBgPage();
-  const bgCopy = bg && bg !== window && bg.deepCopy;
-  if (!bgCopy) {
-    return sendCmd(cmd, data, options);
-  }
-  if (fakeSrc) {
-    fakeSrc = bgCopy(fakeSrc);
-    fakeSrc.fake = true;
-  }
-  return bg.handleCommandMessage(bgCopy({ cmd, data }), fakeSrc).then(deepCopy);
+  const bgMaybe = !COMMANDS_WITH_SRC.includes(cmd) && getBgPage();
+  const handle = bg => {
+    const bgCopy = bg && bg !== window && bg.deepCopy;
+    if (!bgCopy) {
+      return sendCmd(cmd, data, options);
+    }
+    if (fakeSrc) {
+      fakeSrc = bgCopy(fakeSrc);
+      fakeSrc.fake = true;
+    }
+    return bg.handleCommandMessage(bgCopy({ cmd, data }), fakeSrc).then(deepCopy);
+  };
+  return bgMaybe && typeof bgMaybe.then === 'function'
+    ? bgMaybe.then(handle, () => sendCmd(cmd, data, options))
+    : handle(bgMaybe);
 }
 
 /**
