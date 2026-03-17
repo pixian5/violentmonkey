@@ -53,7 +53,7 @@ addPublicCommands({
 
 browser.runtime.onConnect.addListener(onPopupOpened);
 browser.webRequest.onBeforeRequest.addListener(prefetchSetPopup, {
-  urls: [chrome.runtime.getURL(extensionManifest[BROWSER_ACTION].default_popup)],
+  urls: [browser.runtime.getURL(extensionManifest[BROWSER_ACTION].default_popup)],
   types: ['main_frame'],
 });
 

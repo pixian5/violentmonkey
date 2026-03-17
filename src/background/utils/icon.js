@@ -24,7 +24,7 @@ export const getImageData = url => iconCache[url] || (iconCache[url] = loadIcon(
 // Firefox Android does not support such APIs, use noop
 const browserAction = (() => {
   // Using `chrome` namespace in order to skip our browser.js polyfill in Chrome
-  const api = chrome.browserAction;
+  const api = (globalThis.chrome || globalThis.browser)?.browserAction;
   // Some methods like setBadgeText added callbacks only in Chrome 67+.
   const makeMethod = fn => (...args) => {
     try {
@@ -42,7 +42,7 @@ const browserAction = (() => {
   ], fn => (fn ? makeMethod(fn) : noop));
 })();
 // Promisifying explicitly because this API returns an id in Firefox and not a Promise
-const contextMenus = chrome.contextMenus;
+const contextMenus = (globalThis.chrome || globalThis.browser)?.contextMenus;
 
 /** @type {{ [tabId: string]: VMBadgeData }}*/
 export const badges = {};
