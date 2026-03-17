@@ -189,7 +189,7 @@ async function doImportBackup(file) {
   }
   if (!entries) return;
   reportDebug('ZIP条目读取完成');
-  if (reports.length) return;
+  if (reports.some(item => item.type === 'critical')) return;
   reportDebug(`读取条目数: ${entries.length}`);
   report('', file.name, 'info');
   report('', '', 'info'); // deps
