@@ -492,19 +492,20 @@ function openExtensionPage(url) {
       return null;
     }
   };
-  let openResult;
-  try {
-    const create = browser.tabs?.create;
-    if (create) openResult = create.call(browser.tabs, { url });
-  } catch (e) {
-    openResult = null;
-  }
-  if (!openResult || typeof openResult.then !== 'function') {
-    openResult = openResult || openWithWindow();
-    Promise.resolve(openResult).finally(close);
-    return;
-  }
-  openResult.catch(() => openWithWindow()).finally(close);
+  const openWithTabsApi = () => {
+    try {
+      const create = browser.tabs?.create;
+      return create ? create.call(browser.tabs, { url }) : null;
+    } catch (e) {
+      return null;
+    }
+  };
+  const result = openWithTabsApi();
+  const isPromise = result && typeof result.then === 'function';
+  const done = isPromise
+    ? result.catch(() => openWithWindow())
+    : Promise.resolve(result || openWithWindow());
+  done.finally(close);
 }
 async function onInjectionFailureFix() {
   // TODO: promisify options.set, resolve on storage write, await it instead of makePause
