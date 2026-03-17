@@ -86,6 +86,8 @@ module.exports = {
       '*.js',
       'electron/**/*.js',
       'electron/scripts/*.mjs',
+      'safari/**/*.js',
+      'safari/scripts/*.mjs',
       'scripts/*.js',
       'scripts/*.mjs',
     ],

@@ -14,6 +14,14 @@ async function buildManifest(base) {
   if (process.env.TARGET === 'selfHosted') {
     data.browser_specific_settings.gecko.update_url = 'https://raw.githubusercontent.com/violentmonkey/violentmonkey/updates/updates.json';
   }
+  if (process.env.TARGET === 'safari') {
+    delete data.browser_action?.browser_style;
+    if (data.options_ui) delete data.options_ui.open_in_tab;
+    data.permissions = data.permissions?.filter(key => ![
+      'notifications',
+      'webRequestBlocking',
+    ].includes(key));
+  }
   if (isBeta()) {
     // Do not support i18n in beta version
     const name = 'Violentmonkey BETA';

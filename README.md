@@ -67,6 +67,17 @@ If a local code-signing certificate is available in Keychain, the packaging
 script will try to sign the app automatically. Otherwise it will build an
 unsigned app bundle.
 
+### Safari Build
+
+Safari packaging uses Apple's Web Extension converter plus Xcode.
+
+``` sh
+# Build a Safari-compatible extension bundle and host app
+$ yarn safari:dist
+```
+
+The generated Safari host app is placed in `build/safari/DerivedData/Build/Products/Debug/`.
+
 ### Release
 
 See [RELEASE](RELEASE.md) for the release flow.

@@ -27,6 +27,7 @@ import { getFrameDocId, getFrameDocIdAsObj, tabsOnRemoved } from './tabs';
 import { addValueOpener, clearValueOpener, reifyValueOpener } from './values';
 import { ua } from './ua';
 
+const IS_SAFARI = process.env.TARGET === 'safari';
 let isApplied;
 let injectInto;
 let ffInject;
@@ -40,7 +41,7 @@ const API_CONFIG = {
   types: ['main_frame', 'sub_frame'],
 };
 const API_EXTRA = [
-  'blocking', // used for xhrInject and to make Firefox fire the event before GetInjected
+  !IS_SAFARI && 'blocking', // used for xhrInject and to make Firefox fire the event before GetInjected
   kResponseHeaders,
   browser.webRequest.OnHeadersReceivedOptions.EXTRA_HEADERS,
 ].filter(Boolean);
@@ -124,7 +125,7 @@ export const reloadAndSkipScripts = async tab => {
 const OPT_HANDLERS = {
   [BLACKLIST]: cache.destroy,
   defaultInjectInto(value) {
-    value = normalizeRealm(value);
+    value = IS_SAFARI ? CONTENT : normalizeRealm(value);
     cache.destroy();
     if (injectInto) { // already initialized, so we should update the listener
       if (value === CONTENT) {
@@ -307,6 +308,10 @@ function onOptionChanged(changes) {
 }
 
 function toggleXhrInject(enable) {
+  if (IS_SAFARI) {
+    xhrInject = false;
+    return;
+  }
   if (enable) enable = injectInto !== CONTENT;
   if (xhrInject === enable) return;
   xhrInject = enable;
