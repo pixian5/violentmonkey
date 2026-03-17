@@ -137,20 +137,58 @@ async function doImportBackup(file) {
     return;
   }
   let reader;
-  try {
-    reader = new zip.ZipReader(new zip.BlobReader(file));
-  } catch (e) {
-    report(e, file.name, 'critical');
-    return;
-  }
   let entries;
-  try {
-    entries = await withTimeout(reader.getEntries(), 15000, '读取ZIP超时');
-  } catch (e) {
-    report(e, file.name, 'critical');
-    await reader.close().catch(() => {});
-    return;
+  const zipProgressIndex = (() => {
+    reportDebug('读取ZIP条目...');
+    return reports.length - 1;
+  })();
+  const updateZipProgress = (progress, total, label = '读取ZIP') => {
+    const row = reports[zipProgressIndex];
+    if (!row) return;
+    if (Number.isFinite(total) && total > 0) {
+      row.text = `${label}: ${progress} / ${total}`;
+    } else {
+      row.text = `${label}: ${progress}`;
+    }
+  };
+  const readEntriesWithReader = async (makeReader, label) => {
+    try {
+      reader = makeReader();
+    } catch (e) {
+      report(e, file.name, 'critical');
+      return null;
+    }
+    try {
+      updateZipProgress(0, 0, label);
+      return await withTimeout(reader.getEntries({
+        onprogress: (progress, total) => updateZipProgress(progress, total, label),
+      }), 20000, '读取ZIP超时');
+    } catch (e) {
+      report(e, file.name, 'critical');
+      await reader.close().catch(() => {});
+      return null;
+    }
+  };
+  entries = await readEntriesWithReader(
+    () => new zip.ZipReader(new zip.BlobReader(file), { useWebWorkers: false }),
+    '读取ZIP(Blob)'
+  );
+  if (!entries) {
+    reportDebug('Blob读取失败，尝试Uint8Array读取');
+    let buf;
+    try {
+      buf = await withTimeout(file.arrayBuffer(), 20000, '读取文件超时');
+    } catch (e) {
+      report(e, file.name, 'critical');
+      return;
+    }
+    entries = await readEntriesWithReader(
+      () => new zip.ZipReader(new zip.Uint8ArrayReader(new Uint8Array(buf)), { useWebWorkers: false }),
+      '读取ZIP(Uint8Array)'
+    );
   }
+  if (!entries) return;
+  reportDebug('ZIP条目读取完成');
   if (reports.length) return;
   reportDebug(`读取条目数: ${entries.length}`);
   report('', file.name, 'info');
