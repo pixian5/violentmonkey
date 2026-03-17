@@ -1,20 +1,62 @@
 import '@/common/browser';
-import { makePause, sendCmdDirectly } from '@/common';
+import {
+  formatByteLength, getLocaleString, getScriptUpdateUrl, makePause, sendCmdDirectly, trueJoin,
+} from '@/common';
 import handlers from '@/common/handlers';
+import { loadScriptIcon } from '@/common/load-script-icon';
 import options from '@/common/options';
 import { render } from '@/common/ui';
 import '@/common/ui/favicon';
 import '@/common/ui/style';
 import {
-  performSearch, store, updateTags,
+  formatSizesStr, kDescription, kName, kStorageSize, performSearch, SIZE_TITLES, store, updateTags,
 } from './utils';
-import { applyScriptsData, initScript } from './utils/scripts-data';
 import App from './views/app';
 
 let updateThrottle;
 
 initMain();
 render(App);
+
+/**
+ * @param {VMScript} script
+ * @param {number[]} sizes
+ * @param {string} [code]
+ */
+function initScript(script, sizes, code) {
+  const $cache = script.$cache || (script.$cache = {});
+  const meta = script.meta || {};
+  const { custom } = script;
+  const localeName = getLocaleString(meta, kName);
+  const desc = [
+    meta[kName],
+    localeName,
+    meta[kDescription],
+    getLocaleString(meta, kDescription),
+    custom[kName],
+    custom[kDescription],
+  ]::trueJoin('\n');
+  const name = custom[kName] || localeName;
+  let total = 0;
+  let str = '';
+  sizes.forEach((val, i) => {
+    total += val;
+    if (val) str += `${SIZE_TITLES[i]}: ${formatByteLength(val)}\n`;
+  });
+  $cache.desc = desc;
+  $cache.name = name;
+  $cache.lowerName = name.toLocaleLowerCase();
+  $cache.tags = custom.tags || '';
+  $cache.size = formatByteLength(total, true).replace(' ', '');
+  $cache.sizes = formatSizesStr(str);
+  $cache.sizeNum = total;
+  $cache.sizesNum = sizes;
+  $cache[kStorageSize] = sizes[2];
+  if (code) $cache.code = code;
+  script.$canUpdate = getScriptUpdateUrl(script)
+    && (script.config.shouldUpdate ? 1 : -1 /* manual */);
+  loadScriptIcon(script, store, true);
+}
 
 export function loadData() {
   const id = +store.route.paths[1];
@@ -29,7 +71,19 @@ async function requestData(id) {
     sendCmdDirectly('GetData', { id, sizes: true }, { retry: true }),
     options.ready,
   ]);
-  applyScriptsData(data, id);
+  const { [SCRIPTS]: allScripts, sizes, ...auxData } = data;
+  Object.assign(store, auxData); // initScripts needs `cache` in store
+  const scripts = [];
+  const removedScripts = [];
+  // modifying scripts without triggering reactivity
+  allScripts.forEach((script, i) => {
+    initScript(script, sizes[i]);
+    (script.config.removed ? removedScripts : scripts).push(script);
+  });
+  // now we can render
+  store.scripts = scripts;
+  store.removedScripts = removedScripts;
+  if (store.loaded !== 'all') store.loaded = !!id || 'all';
 }
 
 function initMain() {
@@ -43,7 +97,6 @@ function initMain() {
     },
     async UpdateScript({ update, where, code } = {}) {
       if (!update) return;
-      if (!where?.id) return;
       if (updateThrottle
       || (updateThrottle = store.batch)
       && (updateThrottle = Promise.race([updateThrottle, makePause(500)]))) {
@@ -59,12 +112,7 @@ function initMain() {
       if (!script) return; // We're in editor that doesn't have data for all scripts
       const removed = update.config?.removed;
       const oldTags = oldScript?.custom.tags;
-      let sizes;
-      try {
-        [sizes] = await sendCmdDirectly('GetSizes', [where.id]);
-      } catch (e) {
-        sizes = null;
-      }
+      const [sizes] = await sendCmdDirectly('GetSizes', [where.id]);
       const { search } = store;
       Object.assign(script, update);
       if (script.error && !update.error) script.error = null;
@@ -86,7 +134,7 @@ function initMain() {
       const i = script.config.removed ? i2 : i1;
       if (i < 0) {
         script.message = '';
-        const list = script.config.removed ? 'removedScripts' : 'scripts';
+        const list = script.config.removed ? 'removedScripts' : SCRIPTS;
         store[list] = [...store[list], script];
       }
       if (store.tags && (

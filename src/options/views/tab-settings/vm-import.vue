@@ -27,7 +27,6 @@ import { RUN_AT_RE } from '@/common/consts';
 import options from '@/common/options';
 import loadZipLibrary from '@/common/zip';
 import { showConfirmation } from '@/common/ui';
-import { applyScriptsData } from '@/options/utils/scripts-data';
 import {
   kDownloadURL, kExclude, kInclude, kMatch, kOrigExclude, kOrigInclude, kOrigMatch,
   runInBatch, store,
@@ -442,8 +441,12 @@ async function refreshAfterImport() {
   try {
     await options.ready;
     const data = await sendCmdDirectly('GetData', { sizes: true }, { retry: true });
-    const { scripts, removedScripts } = applyScriptsData(data);
-    reportDebug(`导入后脚本数: ${scripts.length}，回收站: ${removedScripts.length}`);
+    const count = data?.scripts?.length || 0;
+    reportDebug(`导入后后台脚本数: ${count}`);
+    if (count && !store.scripts.length) {
+      reportDebug('导入后刷新页面');
+      setTimeout(() => location.reload(), 200);
+    }
   } catch (e) {
     reportDebug(`导入后刷新失败: ${e?.message || e}`);
   }
