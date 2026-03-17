@@ -125,9 +125,32 @@ async function doImportBackup(file) {
   reports.length = 0;
   reportDebug('开始导入');
   const importScriptData = options.get('importScriptData');
-  const zip = await loadZipLibrary();
-  const reader = new zip.ZipReader(new zip.BlobReader(file));
-  const entries = await reader.getEntries().catch(report) || [];
+  let zip;
+  try {
+    zip = await withTimeout(loadZipLibrary(), 8000, '加载ZIP库超时');
+    if (!zip?.ZipReader || !zip?.BlobReader) {
+      throw new Error('ZIP库未就绪');
+    }
+    reportDebug('ZIP库已就绪');
+  } catch (e) {
+    report(e, file.name, 'critical');
+    return;
+  }
+  let reader;
+  try {
+    reader = new zip.ZipReader(new zip.BlobReader(file));
+  } catch (e) {
+    report(e, file.name, 'critical');
+    return;
+  }
+  let entries;
+  try {
+    entries = await withTimeout(reader.getEntries(), 15000, '读取ZIP超时');
+  } catch (e) {
+    report(e, file.name, 'critical');
+    await reader.close().catch(() => {});
+    return;
+  }
   if (reports.length) return;
   reportDebug(`读取条目数: ${entries.length}`);
   report('', file.name, 'info');
@@ -212,7 +235,11 @@ async function doImportBackup(file) {
     }));
   }
   async function readContents(entry) {
-    const text = await entry.getData(new zip.TextWriter());
+    const text = await withTimeout(
+      entry.getData(new zip.TextWriter()),
+      15000,
+      `读取条目超时: ${entry.filename}`
+    );
     return entry.filename.endsWith('.js') ? text : parseJson(text, entry);
   }
   async function readScript(entry, code, name) {
@@ -339,7 +366,8 @@ function withTimeout(promise, timeout, label) {
 }
 
 function report(text, name, type = 'critical') {
-  reports.push({ text, name, type });
+  const message = text && (text.message || text.code) ? (text.message || text.code) : `${text}`;
+  reports.push({ text: message, name, type });
 }
 
 function reportDebug(text) {
