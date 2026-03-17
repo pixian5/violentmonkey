@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+  <title>Violentmonkey for macOS</title>
+  <link rel="stylesheet" href="./renderer.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="brand-mark">VM</div>
+        <div class="brand-copy">
+          <p class="eyebrow">macOS desktop shell</p>
+          <h1>Violentmonkey</h1>
+        </div>
+      </div>
+      <div class="action-strip">
+        <button id="dashboard-button" class="ghost-button" type="button">Dashboard</button>
+        <button id="settings-button" class="ghost-button" type="button">Settings</button>
+        <button id="popup-button" class="ghost-button" type="button">Popup</button>
+      </div>
+    </header>
+
+    <section class="address-bar">
+      <div class="nav-controls">
+        <button id="back-button" class="nav-button" type="button" aria-label="Go back">
+          <span>&larr;</span>
+        </button>
+        <button id="forward-button" class="nav-button" type="button" aria-label="Go forward">
+          <span>&rarr;</span>
+        </button>
+        <button id="reload-button" class="nav-button" type="button" aria-label="Reload page">
+          <span>&#8635;</span>
+        </button>
+      </div>
+
+      <form id="location-form" class="location-form">
+        <input
+          id="location-input"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Enter a URL or search query"
+        >
+      </form>
+
+      <div class="meta-strip">
+        <button id="new-window-button" class="ghost-button compact" type="button">New Window</button>
+        <button id="help-button" class="ghost-button compact" type="button">Docs</button>
+        <span id="extension-pill" class="status-pill">Loading extension</span>
+      </div>
+    </section>
+
+    <main class="viewport">
+      <div id="status-banner" class="status-banner" hidden></div>
+      <webview
+        id="browser-view"
+        allowpopups
+        partition="persist:violentmonkey"
+        src="https://violentmonkey.github.io/"
+      ></webview>
+    </main>
+  </div>
+
+  <script src="./renderer.js"></script>
+</body>
+</html>

@@ -23,6 +23,7 @@ A test build is generated automatically for changes between beta releases. It ca
 
 Install [Node.js](https://nodejs.org/) and Yarn v1.x.
 The version of Node.js should match `"node"` key in `package.json`.
+This project is pinned to Yarn `1.22.22`.
 
 ``` sh
 # Install dependencies
@@ -45,6 +46,26 @@ $ yarn build
 # Build for self-hosted release that has an update_url
 $ yarn build:selfHosted
 ```
+
+### macOS Desktop Build
+
+This repository now includes an Electron-based macOS shell that loads the
+generated Violentmonkey extension into Chromium.
+
+``` sh
+# Install dependencies
+$ yarn
+
+# Run the desktop shell locally
+$ yarn macos:dev
+
+# Package a macOS .app in build/macos/
+$ yarn macos:dist
+```
+
+If a local code-signing certificate is available in Keychain, the packaging
+script will try to sign the app automatically. Otherwise it will build an
+unsigned app bundle.
 
 ### Release
 

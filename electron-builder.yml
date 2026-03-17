@@ -1,0 +1,21 @@
+appId: io.violentmonkey.desktop
+productName: Violentmonkey
+directories:
+  output: build/macos
+files:
+  - electron/**/*
+  - package.json
+extraResources:
+  - from: dist
+    to: dist
+asar: true
+npmRebuild: false
+publish: never
+mac:
+  target:
+    - dir
+  category: public.app-category.developer-tools
+  darkModeSupport: true
+  gatekeeperAssess: false
+  hardenedRuntime: false
+  icon: build/icons/violentmonkey.icns

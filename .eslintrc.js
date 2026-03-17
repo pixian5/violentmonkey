@@ -84,6 +84,8 @@ module.exports = {
     // build scripts
     files: [
       '*.js',
+      'electron/**/*.js',
+      'electron/scripts/*.mjs',
       'scripts/*.js',
       'scripts/*.mjs',
     ],
