@@ -228,10 +228,11 @@ export async function forEachTab(callback) {
  */
 export async function openDashboard(route, src) {
   const url = extensionOptionsPage + (route ? '#' + route : '');
-  for (const tab of await browser.tabs.query({ url: extensionOptionsPage })) {
+  for (const tab of await browser.tabs.query({})) {
     const tabUrl = tab.url;
     // query() can't handle #hash so it returns tabs both with #hash and without it
-    if (tabUrl === url || !route && tabUrl === url + ROUTE_SCRIPTS) {
+    if (tabUrl?.startsWith(extensionOptionsPage)
+    && (tabUrl === url || !route && tabUrl === url + ROUTE_SCRIPTS)) {
       browserWindows?.update(tab[kWindowId], { focused: true });
       return browser.tabs.update(tab.id, { active: true });
     }

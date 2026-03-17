@@ -116,7 +116,8 @@ async function doImportBackup(file) {
   if (!undoPort) {
     now = ' ⯈ ' + new Date().toLocaleTimeString();
     undoPort = browser.runtime.connect({ name: 'undoImport' });
-    await new Promise(resolveOnUndoMessage);
+    const ready = await waitPortReady(undoPort);
+    if (!ready) undoPort = null;
   }
   await processAll(readScriptOptions, '.options.json');
   await processAll(readScript, '.user.js');
@@ -131,7 +132,7 @@ async function doImportBackup(file) {
   sendCmdDirectly('CheckPosition');
   await reader.close();
   reportProgress();
-  if (now) undoTime.value = now;
+  if (now && undoPort) undoTime.value = now;
 
   function parseJson(text, entry) {
     try {
@@ -233,6 +234,7 @@ async function doImportBackup(file) {
 }
 
 async function undoImport() {
+  if (!undoPort) return;
   if (!await showConfirmation(i18nConfirmUndoImport)) return;
   undoTime.value = '';
   undoPort.postMessage(true);
@@ -241,6 +243,26 @@ async function undoImport() {
 
 function resolveOnUndoMessage(resolve) {
   undoPort.onMessage::listenOnce(resolve);
+}
+
+function waitPortReady(port, timeout = 1500) {
+  return new Promise(resolve => {
+    let done;
+    const finish = ok => {
+      if (done) return;
+      done = true;
+      resolve(ok);
+    };
+    const timer = setTimeout(finish, timeout, false);
+    port.onMessage::listenOnce(() => {
+      clearTimeout(timer);
+      finish(true);
+    });
+    port.onDisconnect?.addListener(() => {
+      clearTimeout(timer);
+      finish(false);
+    });
+  });
 }
 
 function initDragDrop(targetElement) {

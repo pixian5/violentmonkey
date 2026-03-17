@@ -56,7 +56,7 @@ export const cachedStorageApi = storage.api = {
     if (!keys || keys.length) {
       let lifetime, id;
       if (!keys) lifetime = TTL_SKIM; // DANGER! Must be `undefined` otherwise.
-      (await api.get(keys))::forEachEntry(([key, val]) => {
+      (await api.get(keys ?? null))::forEachEntry(([key, val]) => {
         res[key] = val;
         dbKeys.set(key, 1);
         cache.put(key, deepCopy(val), lifetime);
@@ -242,6 +242,6 @@ async function undoImport(port) {
     await sendCmd('Reload', delay);
     location.reload();
   });
-  old = await api.get();
+  old = await api.get(null);
   if (!drop) port.postMessage(true);
 }

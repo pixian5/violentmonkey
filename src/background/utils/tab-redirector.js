@@ -129,7 +129,7 @@ browser.tabs.onCreated.addListener((tab) => {
   }
 });
 
-browser.webRequest.onBeforeRequest.addListener((req) => {
+browser.webRequest?.onBeforeRequest?.addListener((req) => {
   const { method, tabId, url } = req;
   if (method !== 'GET') {
     return;

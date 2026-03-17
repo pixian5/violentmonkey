@@ -867,7 +867,7 @@ export async function vacuum(data) {
       status[key] = 2 + scriptId;
     }
   };
-  if (!data) data = await storage.api.get();
+  if (!data) data = await storage.api.get(null);
   data::forEachKey((key) => {
     if (prefixRe.test(key)) {
       status[key] = -1;
