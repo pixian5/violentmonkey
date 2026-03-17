@@ -5,6 +5,7 @@
     <button v-text="i18n('buttonUndo') + undoTime" @click="undoImport" class="has-error"
             :title="i18nConfirmUndoImport"
             v-if="undoTime" />
+    <div v-if="showDebug" class="import-debug" v-text="debugLabel" />
     <div class="mt-1">
       <setting-check name="importScriptData" :label="labelImportScriptData" />
       <br>
@@ -39,6 +40,10 @@ import SettingCheck from '@/common/ui/setting-check';
 const reports = reactive([]);
 const buttonImport = ref();
 const undoTime = ref('');
+const showDebug = true;
+const debugLabel = `导入调试: TARGET=${process.env.TARGET || 'unknown'} `
+  + `VM_VER=${process.env.VM_VER || 'n/a'} `
+  + `时间=${new Date().toLocaleTimeString()}`;
 const i18nConfirmUndoImport = i18n('confirmUndoImport');
 const labelImportScriptData = i18n('labelImportScriptData');
 const labelImportSettings = i18n('labelImportSettings');
@@ -50,7 +55,11 @@ onMounted(() => {
   const toggleDragDrop = initDragDrop(buttonImport.value);
   addEventListener('hashchange', toggleDragDrop);
   toggleDragDrop();
-  reportDebug('导入调试已启用');
+  reportDebug(`导入调试已启用 TARGET=${process.env.TARGET || 'unknown'} VM_VER=${process.env.VM_VER || 'n/a'}`);
+  console.info('[vm-import] 导入调试已启用', {
+    target: process.env.TARGET,
+    vmVer: process.env.VM_VER,
+  });
 });
 onActivated(() => {
   if (++store.isEmpty === 2) {
@@ -68,7 +77,12 @@ function pickBackup() {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.zip';
-  input.style.display = 'none';
+  input.style.position = 'fixed';
+  input.style.left = '-1000px';
+  input.style.top = '0';
+  input.style.opacity = '0';
+  input.style.width = '1px';
+  input.style.height = '1px';
   let picked = false;
   let waitingTimer;
   const onFocus = () => {
@@ -92,6 +106,7 @@ function pickBackup() {
     cleanup();
   });
   document.body.append(input);
+  reportDebug('触发文件选择');
   input.click();
   waitingTimer = setTimeout(() => reportDebug('等待选择文件...'), 400);
   addEventListener('focus', onFocus, true);
@@ -415,5 +430,10 @@ button.drop-allowed {
       color: #bbb;
     }
   }
+}
+.import-debug {
+  color: #888;
+  font-size: 12px;
+  margin-top: 6px;
 }
 </style>
