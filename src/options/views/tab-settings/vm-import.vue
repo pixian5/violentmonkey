@@ -50,6 +50,7 @@ onMounted(() => {
   const toggleDragDrop = initDragDrop(buttonImport.value);
   addEventListener('hashchange', toggleDragDrop);
   toggleDragDrop();
+  reportDebug('导入调试已启用');
 });
 onActivated(() => {
   if (++store.isEmpty === 2) {
@@ -62,20 +63,46 @@ onActivated(() => {
 });
 
 function pickBackup() {
+  reports.length = 0;
+  reportDebug('点击导入按钮');
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.zip';
   input.style.display = 'none';
+  let picked = false;
+  let waitingTimer;
+  const onFocus = () => {
+    if (!picked) reportDebug('可能未选择文件');
+    cleanup();
+  };
+  const cleanup = () => {
+    clearTimeout(waitingTimer);
+    removeEventListener('focus', onFocus, true);
+  };
   input.onchange = () => {
-    importBackup(input.files?.[0]);
+    picked = true;
+    const file = input.files?.[0];
+    reportDebug(file ? `选择文件: ${file.name} (${file.size} bytes)` : '未选择文件');
+    cleanup();
+    importBackup(file);
     input.remove();
   };
+  input.addEventListener?.('cancel', () => {
+    reportDebug('文件选择已取消');
+    cleanup();
+  });
   document.body.append(input);
   input.click();
+  waitingTimer = setTimeout(() => reportDebug('等待选择文件...'), 400);
+  addEventListener('focus', onFocus, true);
 }
 
 async function importBackup(file) {
-  if (!store.batch) runInBatch(doImportBackup, file);
+  if (store.batch) {
+    reportDebug('导入被批处理锁定');
+    return;
+  }
+  runInBatch(doImportBackup, file);
 }
 
 async function doImportBackup(file) {
@@ -243,12 +270,6 @@ async function doImportBackup(file) {
     reports[0].text = 'Tampermonkey';
     values[uriMap[name]] = json.data;
   }
-  function report(text, name, type = 'critical') {
-    reports.push({ text, name, type });
-  }
-  function reportDebug(text) {
-    report(text, '', 'debug');
-  }
   function reportProgress(filename = '') {
     const count = Object.keys(uriMap).length;
     const text = i18n('msgImported', [count === total ? count : `${count} / ${total}`]);
@@ -300,6 +321,14 @@ function withTimeout(promise, timeout, label) {
     timer = setTimeout(() => reject(err), timeout);
   });
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
+function report(text, name, type = 'critical') {
+  reports.push({ text, name, type });
+}
+
+function reportDebug(text) {
+  report(text, '', 'debug');
 }
 
 function initDragDrop(targetElement) {
