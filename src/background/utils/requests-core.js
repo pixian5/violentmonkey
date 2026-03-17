@@ -41,7 +41,7 @@ const API_FILTER = {
   types: ['xmlhttprequest'],
 };
 const EXTRA_HEADERS = [
-  browser.webRequest.OnBeforeSendHeadersOptions.EXTRA_HEADERS,
+  browser.webRequest?.OnBeforeSendHeadersOptions?.EXTRA_HEADERS,
 ].filter(Boolean);
 const headersToInject = {};
 /** @param {chrome.webRequest.HttpHeader} header */

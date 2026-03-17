@@ -35,7 +35,7 @@ let xhrInject = false; // must be initialized for proper comparison when togglin
 let xhrInjectKey;
 
 const sessionId = getUniqId();
-const API_HEADERS_RECEIVED = browser.webRequest.onHeadersReceived;
+const API_HEADERS_RECEIVED = browser.webRequest?.onHeadersReceived;
 const API_CONFIG = {
   urls: ['*://*/*'], // `*` scheme matches only http and https
   types: ['main_frame', 'sub_frame'],
@@ -43,7 +43,7 @@ const API_CONFIG = {
 const API_EXTRA = [
   !IS_SAFARI && 'blocking', // used for xhrInject and to make Firefox fire the event before GetInjected
   kResponseHeaders,
-  browser.webRequest.OnHeadersReceivedOptions.EXTRA_HEADERS,
+  browser.webRequest?.OnHeadersReceivedOptions?.EXTRA_HEADERS,
 ].filter(Boolean);
 const findCspHeader = h => h.name.toLowerCase() === 'content-security-policy';
 const CSP_RE = /(?:^|[;,])\s*(?:script-src(-elem)?|(d)efault-src)(\s+[^;,]+)/g;
@@ -129,9 +129,9 @@ const OPT_HANDLERS = {
     cache.destroy();
     if (injectInto) { // already initialized, so we should update the listener
       if (value === CONTENT) {
-        API_HEADERS_RECEIVED.removeListener(onHeadersReceived);
+        API_HEADERS_RECEIVED?.removeListener(onHeadersReceived);
       } else if (isApplied && IS_FIREFOX && !xhrInject) {
-        API_HEADERS_RECEIVED.addListener(onHeadersReceived, API_CONFIG, API_EXTRA);
+        API_HEADERS_RECEIVED?.addListener(onHeadersReceived, API_CONFIG, API_EXTRA);
       }
     }
     injectInto = value;
@@ -317,9 +317,9 @@ function toggleXhrInject(enable) {
   xhrInject = enable;
   xhrInjectKey ??= extensionRoot.match(XHR_COOKIE_RE)[1];
   cache.destroy();
-  API_HEADERS_RECEIVED.removeListener(onHeadersReceived);
+  API_HEADERS_RECEIVED?.removeListener(onHeadersReceived);
   if (enable) {
-    API_HEADERS_RECEIVED.addListener(onHeadersReceived, API_CONFIG, API_EXTRA);
+    API_HEADERS_RECEIVED?.addListener(onHeadersReceived, API_CONFIG, API_EXTRA);
   }
 }
 
@@ -332,7 +332,7 @@ function togglePreinject(enable) {
   browser.webRequest.onSendHeaders[onOff](onSendHeaders, config);
   if (!isApplied /* remove the listener */
   || IS_FIREFOX && !xhrInject && injectInto !== CONTENT /* add 'nonce' detector */) {
-    API_HEADERS_RECEIVED[onOff](onHeadersReceived, config, config && API_EXTRA);
+    API_HEADERS_RECEIVED?.[onOff](onHeadersReceived, config, config && API_EXTRA);
   }
   tabsOnRemoved[onOff](onTabRemoved);
   browser.tabs.onReplaced[onOff](onTabReplaced);
