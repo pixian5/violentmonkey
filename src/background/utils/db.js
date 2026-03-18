@@ -81,12 +81,16 @@ addOwnCommands({
     if (!codeKey) throw 'Missing codeKey';
     let code;
     try {
-      ({ [codeKey]: code } = await storage.api.get(codeKey));
+      code = await readStorageKeyWithRetry(codeKey);
     } finally {
       await storage.api.remove(codeKey).catch(() => {});
     }
     if (code == null) throw 'Code not found';
     return parseScript({ ...src, code });
+  },
+  /** @return {Promise<{ scripts: number, removed: number }>} */
+  async RebuildScriptIndex() {
+    return rebuildScriptIndex();
   },
   GetTags: () => getScriptsTags(aliveScripts),
   /** @return {Promise<void>} */
@@ -128,23 +132,15 @@ addOwnCommands({
   Vacuum: vacuum,
 });
 
-(async () => {
-  /** @type {string[]} */
-  let allKeys, keys;
-  if (getStorageKeys) {
-    allKeys = await getStorageKeys();
-    // Filtering and creating Map in atomic native code operations instead of js loop
-    keys = allKeys.join('\n').replace(/^(?:(options|version|(?:scr|mod):\d+)|\S+)$/gm, '$1').trim();
-    dbKeys = new Map(JSON.parse(`[${keys.replace(/\S+/g, '["$&",1],').slice(0, -1)}]`));
-    keys = keys.split(/\n+/);
-  }
-  const lastVersion = (!getStorageKeys || dbKeys.has(kVersion))
-    && await storage.base.getOne(kVersion);
-  const version = process.env.VM_VER;
-  const versionChanged = version !== lastVersion;
-  if (!lastVersion) await patchDB();
-  if (versionChanged) storage.api.set({ [kVersion]: version });
-  const data = await storage.api.get(keys);
+function resetScriptState() {
+  aliveScripts.length = 0;
+  removedScripts.length = 0;
+  for (const key in scriptMap) delete scriptMap[key];
+  maxScriptId = 0;
+  maxScriptPosition = 0;
+}
+
+function applyScriptData(data) {
   const uriMap = {};
   const defaultCustom = getDefaultCustom();
   data::forEachEntry(([key, script]) => {
@@ -175,6 +171,7 @@ addOwnCommands({
       if (pathMap) for (const url in pathMap) if (isDataUri(url)) delete pathMap[url];
       maxScriptId = Math.max(maxScriptId, id);
       maxScriptPosition = Math.max(maxScriptPosition, getInt(script.props.position));
+      scriptMap[id] = script;
       (script.config.removed ? removedScripts : aliveScripts).push(script);
       // listing all known resource urls in order to remove unused mod keys
       const {
@@ -186,6 +183,67 @@ addOwnCommands({
       meta.grant = [...new Set(meta.grant || [])]; // deduplicate
     }
   });
+}
+
+function rebuildDbKeysFromAllKeys(allKeys) {
+  if (!allKeys?.length) {
+    dbKeys.clear();
+    return [];
+  }
+  // Filtering and creating Map in atomic native code operations instead of js loop
+  const filtered = allKeys.join('\n')
+    .replace(/^(?:(options|version|(?:scr|mod):\d+)|\S+)$/gm, '$1')
+    .trim();
+  dbKeys.clear();
+  if (!filtered) return [];
+  const keys = filtered.split(/\n+/);
+  keys.forEach(key => dbKeys.set(key, 1));
+  return keys;
+}
+
+async function rebuildScriptIndex() {
+  let allKeys, keys, data;
+  if (getStorageKeys) {
+    allKeys = await getStorageKeys();
+    rebuildDbKeysFromAllKeys(allKeys);
+    const scriptPrefix = storage[S_SCRIPT].prefix;
+    const scriptKeys = allKeys.filter(key => key.startsWith(scriptPrefix));
+    data = await storage.api.get(scriptKeys);
+  } else {
+    data = await storage.api.get(null);
+    dbKeys.clear();
+    Object.keys(data).forEach(key => dbKeys.set(key, 1));
+  }
+  resetScriptState();
+  applyScriptData(data);
+  await sortScripts();
+  return { scripts: aliveScripts.length, removed: removedScripts.length };
+}
+
+async function readStorageKeyWithRetry(codeKey, tries = 8, delay = 50) {
+  for (let i = 0; i < tries; i += 1) {
+    const data = await storage.api.get(codeKey);
+    if (data && data[codeKey] != null) return data[codeKey];
+    if (i + 1 < tries) await makePause(delay);
+  }
+}
+
+(async () => {
+  /** @type {string[]} */
+  let allKeys, keys;
+  if (getStorageKeys) {
+    allKeys = await getStorageKeys();
+    keys = rebuildDbKeysFromAllKeys(allKeys);
+  }
+  const lastVersion = (!getStorageKeys || dbKeys.has(kVersion))
+    && await storage.base.getOne(kVersion);
+  const version = process.env.VM_VER;
+  const versionChanged = version !== lastVersion;
+  if (!lastVersion) await patchDB();
+  if (versionChanged) storage.api.set({ [kVersion]: version });
+  const data = await storage.api.get(keys);
+  resetScriptState();
+  applyScriptData(data);
   initOptions(data, lastVersion, versionChanged);
   if (process.env.DEBUG) {
     console.info('store:', {

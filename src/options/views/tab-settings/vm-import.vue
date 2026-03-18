@@ -250,11 +250,21 @@ async function doImportBackup(file) {
       'SetOptions 超时'
     );
   }
-  await withTimeout(
-    sendCmdDirectly('CheckPosition', null, { retry: true, bgTimeout: 1200 }),
-    15000,
-    'CheckPosition 超时'
-  );
+  try {
+    await withTimeout(
+      sendCmdDirectly('RebuildScriptIndex', null, { retry: true, bgTimeout: 1200 }),
+      20000,
+      'RebuildScriptIndex 超时'
+    );
+    reportDebug('已重建后台脚本索引');
+  } catch (e) {
+    reportDebug(`重建索引失败，回退检查位置: ${e?.message || e}`);
+    await withTimeout(
+      sendCmdDirectly('CheckPosition', null, { retry: true, bgTimeout: 1200 }),
+      15000,
+      'CheckPosition 超时'
+    );
+  }
   await refreshAfterImport();
   await reader.close();
   reportProgress();
