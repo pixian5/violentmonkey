@@ -730,6 +730,7 @@ browser.runtime.onConnect.addListener(port => {
       if (msg?.type === 'start') {
         data = msg.data || {};
         chunks = [];
+        try { port.postMessage({ type: 'ready' }); } catch (e) {}
         return;
       }
       if (!data) return;
