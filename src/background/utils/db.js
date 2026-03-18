@@ -83,7 +83,7 @@ addOwnCommands({
     try {
       code = await readStorageKeyWithRetry(codeKey);
     } finally {
-      await storage.api.remove(codeKey).catch(() => {});
+      await storage.api.remove([codeKey]).catch(() => {});
     }
     if (code == null) throw 'Code not found';
     return parseScript({ ...src, code });
@@ -222,7 +222,7 @@ async function rebuildScriptIndex() {
 
 async function readStorageKeyWithRetry(codeKey, tries = 8, delay = 50) {
   for (let i = 0; i < tries; i += 1) {
-    const data = await storage.api.get(codeKey);
+    const data = await storage.api.get([codeKey]);
     if (data && data[codeKey] != null) return data[codeKey];
     if (i + 1 < tries) await makePause(delay);
   }
