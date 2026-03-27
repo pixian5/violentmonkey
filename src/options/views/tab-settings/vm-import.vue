@@ -1,5 +1,7 @@
 <template>
   <div>
+    <button v-text="buttonImportTxt" @click="pickTextScript" :disabled="store.batch" />
+    <br>
     <button v-text="i18n('buttonImportData')" @click="pickBackup" ref="buttonImport"
             :disabled="store.batch"/>
     <button v-text="i18n('buttonUndo') + undoTime" @click="undoImport" class="has-error"
@@ -52,6 +54,7 @@ const IMPORT_STORAGE_PREFIX = 'import:code:';
 const IMPORT_USE_STORAGE = process.env.TARGET === 'safari';
 const VALUE_BATCH_BYTES = 256 * 1024;
 const VALUE_BATCH_COUNT = 10;
+const buttonImportTxt = `${i18n('buttonImportData')} TXT`;
 const i18nConfirmUndoImport = i18n('confirmUndoImport');
 const labelImportScriptData = i18n('labelImportScriptData');
 const labelImportSettings = i18n('labelImportSettings');
@@ -82,9 +85,19 @@ onActivated(() => {
 function pickBackup() {
   reports.length = 0;
   reportDebug('点击导入按钮');
+  pickFile('.zip', importBackup);
+}
+
+function pickTextScript() {
+  reports.length = 0;
+  reportDebug('点击 TXT 导入按钮');
+  pickFile('.txt,.user.js,.js,text/plain,application/javascript', importTextScript);
+}
+
+function pickFile(accept, onPick) {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.zip';
+  input.accept = accept;
   input.style.position = 'fixed';
   input.style.left = '-1000px';
   input.style.top = '0';
@@ -106,7 +119,7 @@ function pickBackup() {
     const file = input.files?.[0];
     reportDebug(file ? `选择文件: ${file.name} (${file.size} bytes)` : '未选择文件');
     cleanup();
-    importBackup(file);
+    onPick(file);
     input.remove();
   };
   input.addEventListener?.('cancel', () => {
@@ -126,6 +139,37 @@ async function importBackup(file) {
     return;
   }
   runInBatch(doImportBackup, file);
+}
+
+async function importTextScript(file) {
+  if (store.batch) {
+    reportDebug('导入被批处理锁定');
+    return;
+  }
+  runInBatch(doImportTextScript, file);
+}
+
+async function doImportTextScript(file) {
+  if (!file) return;
+  reports.length = 0;
+  reportDebug('开始导入 TXT');
+  try {
+    const code = await withTimeout(file.text(), 15000, '读取 TXT 超时');
+    if (!code?.trim()) {
+      throw new Error('TXT 文件为空');
+    }
+    const result = await withTimeout(
+      parseScriptForImport({ isNew: true }, code, file.name || 'imported.txt'),
+      120000,
+      `TXT 导入超时: ${file.name || 'imported.txt'}`
+    );
+    report('', file.name, 'info');
+    report(i18n('msgInstalled'), result?.update?.meta?.name || file.name, 'info');
+    await refreshAfterImport();
+    reportDebug('TXT 导入完成');
+  } catch (e) {
+    report(e, file?.name, 'critical');
+  }
 }
 
 async function doImportBackup(file) {
