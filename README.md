@@ -74,9 +74,18 @@ Safari packaging uses Apple's Web Extension converter plus Xcode.
 ``` sh
 # Build a Safari-compatible extension bundle and host app
 $ yarn safari:dist
+
+# Launch the Safari host app the correct way so macOS registers the extension
+$ yarn safari:run
 ```
 
 The generated Safari host app is placed in `build/safari/DerivedData/Build/Products/Debug/`.
+
+Do not launch `ViolentmonkeySafari.app/Contents/MacOS/ViolentmonkeySafari` directly.
+On recent macOS versions this may skip the normal app registration flow, so Safari
+won't list the extension even though the build succeeded. `yarn safari:run` opens
+the `.app` bundle via LaunchServices, stops any old host process, and waits until
+`pluginkit` reports the Safari extension as registered.
 
 ### Release
 
