@@ -18,6 +18,7 @@
     "macos:package": "node electron/scripts/package-macos.mjs",
     "macos:dist": "run-s build:extension macos:package",
     "safari:package": "node safari/scripts/package-safari.mjs",
+    "safari:run": "node safari/scripts/run-safari.mjs",
     "safari:dist": "run-s build:safari-extension safari:package",
     "i18n": "gulp i18n",
     "copyI18n": "gulp copyI18n",
