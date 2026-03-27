@@ -58,6 +58,7 @@ const buttonImportScriptFile = '从文件导入脚本';
 const i18nConfirmUndoImport = i18n('confirmUndoImport');
 const labelImportScriptData = i18n('labelImportScriptData');
 const labelImportSettings = i18n('labelImportSettings');
+const isPlainObject = val => val && typeof val === 'object' && !Array.isArray(val);
 
 let depsPortId;
 let undoPort;
@@ -158,6 +159,11 @@ async function doImportTextScript(file) {
     if (!code?.trim()) {
       throw new Error('TXT 文件为空');
     }
+    const backup = parseTextBackup(code);
+    if (backup) {
+      await importTextBackup(backup, file.name || 'imported.txt');
+      return;
+    }
     const result = await withTimeout(
       parseScriptForImport({ isNew: true }, code, file.name || 'imported.txt'),
       120000,
@@ -170,6 +176,67 @@ async function doImportTextScript(file) {
   } catch (e) {
     report(e, file?.name, 'critical');
   }
+}
+
+function parseTextBackup(code) {
+  try {
+    const data = JSON.parse(code);
+    return data?.format === 'violentmonkey-text-backup'
+      && Array.isArray(data.scripts)
+      && data
+      || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function importTextBackup(backup, fileName) {
+  reportDebug('识别为 TXT 备份');
+  const scripts = backup.scripts || [];
+  const importSettings = options.get('importSettings') && backup.settings;
+  const importScriptData = options.get('importScriptData');
+  for (const item of scripts) {
+    const result = await withTimeout(
+      parseScriptForImport({
+        custom: item.custom,
+        config: item.config,
+        position: item.position,
+        props: item.props,
+      }, item.code, `${item.name || 'script'}.txt`),
+      120000,
+      `TXT 备份导入超时: ${item.name || 'script'}`
+    );
+    report(i18n('msgInstalled'), result?.update?.meta?.name || item.name, 'info');
+    if (importScriptData && item.values && result?.update?.props?.uri) {
+      await sendValueStoresBatched({
+        [result.update.props.uri]: item.values,
+      });
+    }
+  }
+  if (importSettings && isPlainObject(importSettings)) {
+    delete importSettings.sync;
+    await withTimeout(
+      sendCmdDirectly('SetOptions', importSettings, { retry: true, bgTimeout: 1200 }),
+      15000,
+      'SetOptions 超时'
+    );
+  }
+  try {
+    await withTimeout(
+      sendCmdDirectly('RebuildScriptIndex', null, { retry: true, bgTimeout: 1200 }),
+      20000,
+      'RebuildScriptIndex 超时'
+    );
+  } catch (e) {
+    await withTimeout(
+      sendCmdDirectly('CheckPosition', null, { retry: true, bgTimeout: 1200 }),
+      15000,
+      'CheckPosition 超时'
+    );
+  }
+  report('', fileName, 'info');
+  await refreshAfterImport();
+  reportDebug('TXT 备份导入完成');
 }
 
 async function doImportBackup(file) {
@@ -286,7 +353,7 @@ async function doImportBackup(file) {
     await processAll(readScriptStorage, '.storage.json');
     await sendValueStoresBatched(values);
   }
-  if (isObject(importSettings)) {
+  if (isPlainObject(importSettings)) {
     delete importSettings.sync;
     await withTimeout(
       sendCmdDirectly('SetOptions', importSettings, { retry: true, bgTimeout: 1200 }),
@@ -518,45 +585,6 @@ async function doImportBackup(file) {
     reports[0].text = 'Tampermonkey';
     values[uriMap[name]] = json.data;
   }
-  async function sendValueStoresBatched(data) {
-    const entries = Object.entries(data);
-    const total = entries.length;
-    if (!total) return;
-    reportDebug(`写入脚本数据: ${total}`);
-    let batch = {};
-    let batchBytes = 0;
-    let sent = 0;
-    const flush = async () => {
-      const payload = batch;
-      batch = {};
-      batchBytes = 0;
-      await withTimeout(
-        sendCmdDirectly('SetValueStores', payload, { retry: true, bgTimeout: 1200 }),
-        20000,
-        `SetValueStores 超时 (${sent}/${total})`
-      );
-      await makePause(0);
-    };
-    for (const [key, store] of entries) {
-      let size = 0;
-      try { size = JSON.stringify(store).length; } catch (e) {}
-      const approx = String(key).length + size + 8;
-      if (batchBytes && (
-        batchBytes + approx > VALUE_BATCH_BYTES
-        || Object.keys(batch).length >= VALUE_BATCH_COUNT
-      )) {
-        await flush();
-        reportDebug(`写入脚本数据进度: ${sent}/${total}`);
-      }
-      batch[key] = store;
-      batchBytes += approx;
-      sent += 1;
-    }
-    if (Object.keys(batch).length) {
-      await flush();
-    }
-    reportDebug(`写入脚本数据完成: ${sent}/${total}`);
-  }
   function reportProgress(filename = '') {
     const count = Object.keys(uriMap).length;
     const text = i18n('msgImported', [count === total ? count : `${count} / ${total}`]);
@@ -567,6 +595,46 @@ async function doImportBackup(file) {
   function toStringArray(data) {
     return ensureArray(data).filter(item => typeof item === 'string');
   }
+}
+
+async function sendValueStoresBatched(data) {
+  const entries = Object.entries(data);
+  const total = entries.length;
+  if (!total) return;
+  reportDebug(`写入脚本数据: ${total}`);
+  let batch = {};
+  let batchBytes = 0;
+  let sent = 0;
+  const flush = async () => {
+    const payload = batch;
+    batch = {};
+    batchBytes = 0;
+    await withTimeout(
+      sendCmdDirectly('SetValueStores', payload, { retry: true, bgTimeout: 1200 }),
+      20000,
+      `SetValueStores 超时 (${sent}/${total})`
+    );
+    await makePause(0);
+  };
+  for (const [key, store] of entries) {
+    let size = 0;
+    try { size = JSON.stringify(store).length; } catch (e) {}
+    const approx = String(key).length + size + 8;
+    if (batchBytes && (
+      batchBytes + approx > VALUE_BATCH_BYTES
+      || Object.keys(batch).length >= VALUE_BATCH_COUNT
+    )) {
+      await flush();
+      reportDebug(`写入脚本数据进度: ${sent}/${total}`);
+    }
+    batch[key] = store;
+    batchBytes += approx;
+    sent += 1;
+  }
+  if (Object.keys(batch).length) {
+    await flush();
+  }
+  reportDebug(`写入脚本数据完成: ${sent}/${total}`);
 }
 
 async function refreshAfterImport() {
