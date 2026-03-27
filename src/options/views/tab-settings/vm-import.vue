@@ -1,6 +1,6 @@
 <template>
   <div>
-    <button v-text="buttonImportTxt" @click="pickTextScript" :disabled="store.batch" />
+    <button v-text="buttonImportScriptFile" @click="pickTextScript" :disabled="store.batch" />
     <br>
     <button v-text="i18n('buttonImportData')" @click="pickBackup" ref="buttonImport"
             :disabled="store.batch"/>
@@ -54,7 +54,7 @@ const IMPORT_STORAGE_PREFIX = 'import:code:';
 const IMPORT_USE_STORAGE = process.env.TARGET === 'safari';
 const VALUE_BATCH_BYTES = 256 * 1024;
 const VALUE_BATCH_COUNT = 10;
-const buttonImportTxt = `${i18n('buttonImportData')} TXT`;
+const buttonImportScriptFile = '从文件导入脚本';
 const i18nConfirmUndoImport = i18n('confirmUndoImport');
 const labelImportScriptData = i18n('labelImportScriptData');
 const labelImportSettings = i18n('labelImportSettings');
@@ -90,7 +90,7 @@ function pickBackup() {
 
 function pickTextScript() {
   reports.length = 0;
-  reportDebug('点击 TXT 导入按钮');
+  reportDebug('点击从文件导入脚本按钮');
   pickFile('.txt,.user.js,.js,text/plain,application/javascript', importTextScript);
 }
 
