@@ -15,7 +15,6 @@ export let
   safeBind,
   // window
   SafeCustomEvent,
-  SafeDOMParser,
   SafeDOMException,
   SafeError,
   SafeEventTarget,
@@ -103,10 +102,12 @@ export const VAULT = (() => {
     // injectPageSandbox iframe's `global` is `window` because it's in page mode
     src = res[0];
     srcWindow = src;
-    // In FF some stuff from a detached iframe doesn't work, so we export it from content
-    if (IS_FIREFOX) srcFF = res[1];
-    // Detecting via a feature that was added in Chrome 115
-    else ChromePromiseBug = !src.document.requestStorageAccessFor;
+    if (!__.MV3) {
+      // In FF some stuff from a detached iframe doesn't work, so we export it from content
+      if (IS_FIREFOX) srcFF = res[1];
+      // Detecting via a feature that was added in Chrome 115
+      else ChromePromiseBug = !src.document.requestStorageAccessFor;
+    }
     res = false;
   }
   if (!res) {
@@ -115,7 +116,6 @@ export const VAULT = (() => {
   res = [
     // window
     SafeCustomEvent = res[i += 1] || src.CustomEvent,
-    SafeDOMParser = res[i += 1] || src.DOMParser,
     SafeDOMException = res[i += 1] || src.DOMException,
     SafeError = res[i += 1] || src.Error,
     SafeEventTarget = res[i += 1] || src.EventTarget,
@@ -163,13 +163,12 @@ export const VAULT = (() => {
     jsonStringify = res[i += 1] || src.JSON.stringify,
     logging = res[i += 1] || nullObjFrom((srcFF || src).console),
     mathRandom = res[i += 1] || src.Math.random,
-    parseFromString = res[i += 1] || SafeDOMParser[PROTO].parseFromString,
     reflectOwnKeys = res[i += 1] || Reflect.ownKeys,
     stopImmediatePropagation = res[i += 1] || src.Event[PROTO].stopImmediatePropagation,
     SafePromise = res[i += 1] || src.Promise,
     SafePromiseConstructor = res[i += 1] || (
       tmp = SafePromise[PROTO],
-      IS_FIREFOX ? SafePromise : tmp.constructor
+        !__.MV3 && IS_FIREFOX ? SafePromise : tmp.constructor
     ),
     then = res[i += 1] || tmp.then,
     urlSearchParamsToString = res[i += 1] || src.URLSearchParams[PROTO].toString,
@@ -188,7 +187,8 @@ export const VAULT = (() => {
     ],
     builtinFuncs = res[i += 1] || (funcs => {
       // extracting commonly hijacked functions that still work when bound to a real `window`
-      for (const key of ['setInterval', 'setTimeout']) {
+      // (including clearXXX to access the same internal DOM registry of timers)
+      for (const key of ['setInterval', 'setTimeout', 'clearInterval', 'clearTimeout']) {
         funcs[key] = setPrototypeOf(describeProperty(srcWindow, key), null);
       }
       return funcs;
@@ -196,12 +196,12 @@ export const VAULT = (() => {
   ];
   // Well-known Symbols are unforgeable
   toStringTagSym = SafeSymbol.toStringTag;
-  if (ChromePromiseBug) {
+  if (!__.MV3 && ChromePromiseBug) {
     /* Chrome pre-115 can't use SafePromise when iframe is removed, fixed in crrev.com/1142900.
      * We'll use the unsafe one from `window` only for userscript API stuff, not internally.
      * Getting it in a `try` because `Promise` may already have a broken getter. */
     try { SafePromise = Promise; } catch {/**/}
-  } else if (IS_FIREFOX) {
+  } else if (!__.MV3 && IS_FIREFOX) {
     // Hijacking an unused global to store the current realm's Promise prototype
     SafePromiseConstructor = getPrototypeOf(promiseResolve());
   } else {

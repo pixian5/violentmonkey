@@ -1,16 +1,13 @@
 import { i18n, defaultImage, sendTabCmd, trueJoin } from '@/common';
-import { addPublicCommands, commands } from './init';
-import { CHROME } from './ua';
+import { addPublicCommands, commands, init } from './init';
+import sessionData, { flushSession, kNotifications, notifications } from './session-data';
 import { vetUrl } from './url';
 
-const notifications = browser.notifications;
-/** @type {{ [nid: string]: browser.runtime.MessageSender | function | number }} */
-const openers = {};
 const kZombie = 'zombie';
 const kZombieTimeout = 'zombieTimeout';
 const kZombieUrl = 'zombieUrl';
 
-addPublicCommands(notifications?.create ? {
+addPublicCommands(browser.notifications?.create ? {
   /** @return {Promise<string>} */
   async Notification({
     image,
@@ -22,8 +19,8 @@ addPublicCommands(notifications?.create ? {
     [kZombieUrl]: zombieUrl,
     [kZombieTimeout]: zombieTimeout,
   }, src) {
-    if (tag) clearZombieTimer(openers[tag]);
-    const notificationId = await notifications.create(tag, {
+    if (tag) clearZombieTimer(notifications[tag]);
+    const notificationId = await browser.notifications?.create(tag, {
       type: 'basic',
       title: [title, IS_FIREFOX && i18n('extName')]::trueJoin(' - '), // Chrome already shows the name
       message: text,
@@ -31,21 +28,24 @@ addPublicCommands(notifications?.create ? {
       ...!IS_FIREFOX && {
         requireInteraction: !!onclick,
       },
-      ...CHROME >= 70 && {
-        silent,
-      }
+      silent,
     });
-    if (isFunction(onclick)) {
-      openers[notificationId] = onclick;
-    } else if (src) {
-      openers[notificationId] = src;
-      if (+zombieTimeout > 0) src[kZombieTimeout] = +zombieTimeout;
-      if (zombieUrl != null) src[kZombieUrl] = vetUrl(zombieUrl, src.url);
+    if (src) {
+      const op = notifications[notificationId] = {
+        tabId: src.tab?.id,
+        [kFrameId]: src[kFrameId],
+      };
+      if (+zombieTimeout > 0) op[kZombieTimeout] = +zombieTimeout;
+      if (zombieUrl != null) op[kZombieUrl] = vetUrl(zombieUrl, src.url);
+      if (__.MV3) flushSession(kNotifications, notifications);
+    } else if (onclick) {
+      notifications[notificationId] = onclick;
+      if (__.MV3) flushSession(kNotifications, notifications);
     }
     return notificationId;
   },
   RemoveNotification(nid) {
-    clearZombieTimer(openers[nid]);
+    clearZombieTimer(notifications[nid]);
     removeNotification(nid);
   },
 } : {
@@ -56,44 +56,47 @@ addPublicCommands(notifications?.create ? {
   },
 });
 
-notifications?.onClicked.addListener((id) => {
-  notifyOpener(id, true);
-});
+browser.notifications?.onClicked.addListener((id) => notifyOpener(id, true));
 
-notifications?.onClosed.addListener((id) => {
-  notifyOpener(id, false);
-  delete openers[id];
-});
+browser.notifications?.onClosed.addListener((id) => notifyOpener(id, false));
 
-function notifyOpener(id, isClick) {
-  const op = openers[id];
+async function notifyOpener(id, isClick) {
+  if (init) await sessionData;
+  const op = notifications[id];
   if (!op) return;
-  if (isFunction(op)) {
-    if (isClick) op();
+  if (op.cmd) {
+    if (isClick) op.for.forEach(arg => commands[op.cmd](arg));
   } else if (op > 0) {
     if (isClick) clearZombieTimer(op);
   } else if (op[kZombie]) {
     if (isClick) {
       commands.TabOpen({ url: op[kZombieUrl] }, op);
-      removeNotification(id); // Chrome doesn't auto-remove it on click
     }
   } else {
-    sendTabCmd(op.tab.id, isClick ? 'NotificationClick' : 'NotificationClose', id, {
+    sendTabCmd(op.tabId, isClick ? 'NotificationClick' : 'NotificationClose', id, {
       [kFrameId]: op[kFrameId],
     });
+  }
+  if (isClick) {
+    removeNotification(id); // Chrome doesn't auto-remove it on click
+  } else {
+    delete notifications[id];
+    if (__.MV3) flushSession(kNotifications, notifications);
   }
 }
 
 export function clearNotifications(tabId, frameId, tabRemoved) {
-  for (const nid in openers) {
-    const op = openers[nid];
+  for (const nid in notifications) {
+    const op = notifications[nid];
     if (isObject(op)
-    && op.tab.id === tabId
+    && op.tabId === tabId
     && (!frameId || op[kFrameId] === frameId)
     && !op[kZombie]) {
-      if (op[kZombieTimeout]) {
-        op[kZombie] = setTimeout(removeNotification, op[kZombieTimeout], nid);
-        if (!op[kZombieUrl]) openers[nid] = op[kZombie];
+      const timeout = op[kZombieTimeout];
+      if (timeout) {
+        if (__.MV3) chrome.alarms.create(kNotifications + nid, { when: Date.now() + timeout });
+        op[kZombie] = setTimeout(removeNotification, timeout, nid);
+        if (!op[kZombieUrl]) notifications[nid] = op[kZombie];
         if (tabRemoved) op._removed = true;
       } else {
         removeNotification(nid);
@@ -106,7 +109,9 @@ function clearZombieTimer(op) {
   if (op > 0) clearTimeout(op);
 }
 
-function removeNotification(nid) {
-  delete openers[nid];
-  return notifications?.clear(nid);
+export function removeNotification(nid) {
+  if (!notifications[nid]) return;
+  delete notifications[nid];
+  if (__.MV3) flushSession(kNotifications, notifications);
+  return browser.notifications?.clear(nid);
 }

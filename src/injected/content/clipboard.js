@@ -6,7 +6,7 @@ let clipboardData;
 let setClipboard;
 
 // Attaching a dummy listener so the page can't prevent us (fwiw h@xx0rz excluded)
-if (IS_FIREFOX) {
+if (!__.MV3 && IS_FIREFOX) {
   on('copy', onClipboardCopy = e => clipboardData && doCopy(e), true);
 }
 
@@ -25,7 +25,7 @@ onScripts.push(({ clipFF }) => {
     setClipboard = async params => {
       await bridge[REIFY];
       clipboardData = params;
-      if (!document::execCommand('copy') && process.env.DEBUG) {
+      if (!document::execCommand('copy') && __.DEBUG) {
         log('warn', null, 'GM_setClipboard failed!');
       }
       clipboardData = null;

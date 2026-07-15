@@ -1,21 +1,25 @@
 import {
-  dataUri2text, i18n, getScriptHome, isDataUri,
-  getScriptName, getScriptsTags, getScriptUpdateUrl, isRemote, sendCmd, trueJoin,
-  getScriptPrettyUrl, getScriptRunAt, makePause, isValidHttpUrl, normalizeTag,
-  ignoreChromeErrors,
+  dataUri2text, getScriptHome, getScriptName, getScriptPrettyUrl, getScriptRunAt, getScriptsTags,
+  getScriptUpdateUrl, i18n, ignoreChromeErrors, isDataUri, isRemote, isValidHttpUrl, makePause,
+  sendCmd, trueJoin,
 } from '@/common';
-import { FETCH_OPTS, INFERRED, TIMEOUT_24HOURS, TIMEOUT_WEEK, TL_AWAIT } from '@/common/consts';
+import {
+  CACHE_KEYS, FETCH_OPTS, INFERRED, kTag, PROMISE, REQ_KEYS, TIMEOUT_24HOURS, TIMEOUT_WEEK,
+  TL_AWAIT, VALUE_IDS,
+} from '@/common/consts';
 import { deepSize, forEachEntry, forEachKey, forEachValue } from '@/common/object';
 import pluginEvents from '../plugin/events';
 import {
   aliveScripts, getDefaultCustom, getNameURI, inferScriptProps, newScript, parseMeta,
-  removedScripts, scriptMap,
+  removedScripts, scriptMap, scriptSiteVisited,
 } from './script';
 import { testBlacklist, testerBatch, testScript } from './tester';
 import { getImageData } from './icon';
 import { addOwnCommands, addPublicCommands, commands, resolveInit } from './init';
+import { installedOver, NEW_INSTALL } from './on-installed';
 import patchDB from './patch-db';
 import { initOptions, kVersion, setOption } from './options';
+import sessionData from './session-data';
 import storage, {
   S_CACHE, S_CODE, S_REQUIRE, S_SCRIPT, S_VALUE,
   S_CACHE_PRE, S_CODE_PRE, S_MOD_PRE, S_REQUIRE_PRE, S_SCRIPT_PRE, S_VALUE_PRE,
@@ -133,11 +137,14 @@ addOwnCommands({
 });
 
 function resetScriptState() {
+  maxScriptId = 0;
+  maxScriptPosition = 0;
+  dbKeys.clear();
   aliveScripts.length = 0;
   removedScripts.length = 0;
   for (const key in scriptMap) delete scriptMap[key];
-  maxScriptId = 0;
-  maxScriptPosition = 0;
+  for (const key in scriptSizes) delete scriptSizes[key];
+  for (const key in scriptSiteVisited) delete scriptSiteVisited[key];
 }
 
 function applyScriptData(data) {
@@ -166,7 +173,17 @@ function applyScriptData(data) {
         id,
         uri,
       };
-      const {pathMap} = script.custom = Object.assign({}, defaultCustom, script.custom);
+      const custom = script.custom = { ...defaultCustom, ...script.custom };
+      const { pathMap, tags } = custom;
+      const meta = script.meta ||= {};
+      const tag = meta[kTag];
+      if (tags) {
+        custom[kTag] = tags.split(/\s+/);
+        delete custom.tags;
+      }
+      if (tag && !Array.isArray(tag) /* script installed in an older VM */) {
+        meta[kTag] = tag.split(/\s+/);
+      }
       // Patching the bug in 2.27.0 where data: URI was saved as invalid in pathMap
       if (pathMap) for (const url in pathMap) if (isDataUri(url)) delete pathMap[url];
       maxScriptId = Math.max(maxScriptId, id);
@@ -174,9 +191,6 @@ function applyScriptData(data) {
       scriptMap[id] = script;
       (script.config.removed ? removedScripts : aliveScripts).push(script);
       // listing all known resource urls in order to remove unused mod keys
-      const {
-        meta = script.meta = {},
-      } = script;
       if (!meta.require) meta.require = [];
       if (!meta.resources) meta.resources = {};
       if (TL_AWAIT in meta) meta[TL_AWAIT] = true; // a string if the script was saved in old VM
@@ -184,6 +198,51 @@ function applyScriptData(data) {
     }
   });
 }
+
+export async function initializeDatabase() {
+  resetScriptState();
+  /** @type {string[]} */
+  let keys;
+  let [allKeys, data] = await Promise.all([
+    getStorageKeys?.(),
+    !getStorageKeys && storage.api.get(),
+    sessionData,
+  ]);
+  if (allKeys) {
+    // Filtering and creating Map in atomic native code operations instead of js loop
+    keys = allKeys.join('\n').replace(/^(?:(options|version|(?:scr|mod):\d+)|\S+)$/gm, '$1').trim();
+    dbKeys = new Map(JSON.parse(`[${keys.replace(/\S+/g, '["$&",1],').slice(0, -1)}]`));
+    keys = keys.split(/\n+/);
+    data = await storage.api.get(keys);
+  }
+  if (installedOver === NEW_INSTALL) await patchDB();
+  if (installedOver) storage.api.set({ [kVersion]: __.VM_VER });
+  applyScriptData(data);
+  initOptions(data, installedOver, installedOver !== NEW_INSTALL);
+  if (__.DEBUG) {
+    console.info('store:', {
+      aliveScripts, removedScripts, maxScriptId, maxScriptPosition, scriptMap, scriptSizes,
+    });
+  }
+  sortScripts();
+  if (!__.MV3 || !sessionData.init && chrome.storage.session.set({ init: 1 })) {
+    setTimeout(async () => {
+      if (allKeys?.length) {
+        const set = new Set(keys); // much faster lookup
+        const data2 = await storage.api.get(allKeys.filter(k => !set.has(k)));
+        Object.assign(data, data2);
+      }
+      vacuum(data);
+    }, 100);
+    checkRemove();
+  }
+  if (!__.MV3) {
+    setInterval(checkRemove, TIMEOUT_24HOURS);
+  }
+  resolveInit();
+}
+
+initializeDatabase();
 
 function rebuildDbKeysFromAllKeys(allKeys) {
   if (!allKeys?.length) {
@@ -202,7 +261,7 @@ function rebuildDbKeysFromAllKeys(allKeys) {
 }
 
 async function rebuildScriptIndex() {
-  let allKeys, keys, data;
+  let allKeys, data;
   if (getStorageKeys) {
     allKeys = await getStorageKeys();
     rebuildDbKeysFromAllKeys(allKeys);
@@ -227,42 +286,6 @@ async function readStorageKeyWithRetry(codeKey, tries = 8, delay = 50) {
     if (i + 1 < tries) await makePause(delay);
   }
 }
-
-(async () => {
-  /** @type {string[]} */
-  let allKeys, keys;
-  if (getStorageKeys) {
-    allKeys = await getStorageKeys();
-    keys = rebuildDbKeysFromAllKeys(allKeys);
-  }
-  const lastVersion = (!getStorageKeys || dbKeys.has(kVersion))
-    && await storage.base.getOne(kVersion);
-  const version = process.env.VM_VER;
-  const versionChanged = version !== lastVersion;
-  if (!lastVersion) await patchDB();
-  if (versionChanged) storage.api.set({ [kVersion]: version });
-  const data = await storage.api.get(keys);
-  resetScriptState();
-  applyScriptData(data);
-  initOptions(data, lastVersion, versionChanged);
-  if (process.env.DEBUG) {
-    console.info('store:', {
-      aliveScripts, removedScripts, maxScriptId, maxScriptPosition, scriptMap, scriptSizes,
-    });
-  }
-  sortScripts();
-  setTimeout(async () => {
-    if (allKeys?.length) {
-      const set = new Set(keys); // much faster lookup
-      const data2 = await storage.api.get(allKeys.filter(k => !set.has(k)));
-      Object.assign(data, data2);
-    }
-    vacuum(data);
-  }, 100);
-  checkRemove();
-  setInterval(checkRemove, TIMEOUT_24HOURS);
-  resolveInit();
-})();
 
 /** @return {number} */
 function getInt(val) {
@@ -332,10 +355,6 @@ export function getScripts() {
   return [...aliveScripts];
 }
 
-export const CACHE_KEYS = 'cacheKeys';
-export const REQ_KEYS = 'reqKeys';
-export const VALUE_IDS = 'valueIds';
-export const PROMISE = 'promise';
 const makeEnv = () => ({
   depsMap: {},
   [RUN_AT]: {},
@@ -507,13 +526,7 @@ function reportBadScripts(ids) {
 
 export function notifyToOpenScripts(title, text, ids) {
   // FF doesn't show notifications of type:'list' so we'll use `text` everywhere
-  commands.Notification({
-    title,
-    text,
-    onclick() {
-      ids.forEach(id => commands.OpenEditor(id));
-    },
-  });
+  commands.Notification({ title, text, onclick: { cmd: 'OpenEditor', for: ids } });
 }
 
 /**
@@ -626,9 +639,9 @@ export function checkRemove({ force } = {}) {
 }
 
 /** @return {string} */
-const getUUID = crypto.randomUUID ? crypto.randomUUID.bind(crypto) : () => {
+const getUUID = __.MV3 || crypto.randomUUID ? crypto.randomUUID.bind(crypto) : () => {
   const rnd = new Uint16Array(8);
-  window.crypto.getRandomValues(rnd);
+  crypto.getRandomValues(rnd);
   // xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx
   // We're using UUIDv4 variant 1 so N=4 and M=8
   // See format_uuid_v3or5 in https://tools.ietf.org/rfc/rfc4122.txt
@@ -747,7 +760,6 @@ export async function parseScript(src) {
   }
   // Allowing any http url including localhost as the user may keep multiple scripts there
   if (isValidHttpUrl(src.url)) custom.lastInstallURL = src.url;
-  custom.tags = custom.tags?.split(/\s+/).map(normalizeTag).filter(Boolean).join(' ').toLowerCase();
   if (!srcUpdate) storage.mod.remove(getScriptUpdateUrl(script, { all: true }) || []);
   buildPathMap(script, src.url);
   const depsPromise = fetchResources(script, src);
@@ -779,8 +791,8 @@ browser.runtime.onConnect.addListener(port => {
   const finish = (msg) => {
     if (done) return;
     done = true;
-    try { port.postMessage(msg); } catch (e) {}
-    try { port.disconnect(); } catch (e) {}
+    try { port.postMessage(msg); } catch (e) { /* ignore */ }
+    try { port.disconnect(); } catch (e) { /* ignore */ }
   };
   port.onMessage.addListener(async msg => {
     if (done) return;
@@ -788,7 +800,7 @@ browser.runtime.onConnect.addListener(port => {
       if (msg?.type === 'start') {
         data = msg.data || {};
         chunks = [];
-        try { port.postMessage({ type: 'ready' }); } catch (e) {}
+        try { port.postMessage({ type: 'ready' }); } catch (e) { /* ignore */ }
         return;
       }
       if (!data) return;
@@ -941,6 +953,7 @@ export async function vacuum(data) {
   const sizes = {};
   const result = {};
   const toFetch = [];
+  const errors = result.errors = [];
   const keysToRemove = [];
   /** -1=untouched, 1=touched, 2(+scriptId)=missing */
   const status = {};
@@ -1017,17 +1030,17 @@ export async function vacuum(data) {
         noFetch.push(url || +id && getScriptPrettyUrl(getScriptById(id)) || key);
       } else if (url && area.fetch) {
         keysToRemove.push(S_MOD_PRE + url);
-        toFetch.push(area.fetch(url).catch(err => `${
+        toFetch.push(area.fetch(url).catch(err => errors.push(`${
           getScriptName(getScriptById(+id || value - 2))
         }: ${
           formatHttpError(err)
-        }`));
+        }`)));
       }
     }
   });
   if (keysToRemove.length) {
     await storage.api.remove(keysToRemove); // Removing `mod` before fetching
-    result.errors = (await Promise.all(toFetch)).filter(Boolean);
+    await Promise.all(toFetch);
   }
   if (noFetch && noFetch.length) {
     console.warn('Missing required resources. ' + kTryVacuuming, noFetch);

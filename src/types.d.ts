@@ -45,11 +45,14 @@ declare namespace GMReq {
     frame: VMMessageTargetFrame;
     frameId: number;
     id: string;
+    resolve: (v?: any) => void;
     responseHeaders: string;
+    ruleId?: number;
     storeId: string;
     tabId: number;
     url: string;
     xhr: XMLHttpRequest;
+    xhrUrl: string;
   }
   interface Content {
     chunks?: Uint8Array | string[];
@@ -140,8 +143,8 @@ declare type VMBadgeData = {
   /** Map: frameId -> number of scripts in this frame */
   frameIds: { [frameId: string]: number };
   icon: string;
-  /** all ids */
-  ids: Set<number>;
+  /** all ids (using an array because chrome.storage.session doesn't support Set */
+  ids: number[];
   /**
    * undefined = after VM started (unknown injectability),
    * null = after tab navigated (unknown injectability),
@@ -169,6 +172,7 @@ declare interface VMScript {
   };
   custom: {
     name?: string;
+    comment?: string;
     /** Installation web page that will be used for inferring a missing @homepageURL */
     from?: string;
     downloadURL?: string;
@@ -186,9 +190,11 @@ declare interface VMScript {
     origExcludeMatch: boolean;
     origInclude: boolean;
     origMatch: boolean;
+    origTag: boolean;
     pathMap?: StringMap;
     runAt?: VMScriptRunAt;
-    tags?: string;
+    /** @since v2.36 */
+    tag?: string[];
   };
   meta: {
     author?: string;
@@ -209,6 +215,7 @@ declare interface VMScript {
     resources: StringMap;
     runAt?: VMScriptRunAt;
     supportURL?: string;
+    tag?: string[];
     topLevelAwait?: boolean;
     unwrap?: boolean;
     version?: string;
@@ -227,6 +234,30 @@ declare interface VMScript {
     supportURL?: string;
     visit: number;
   },
+}
+
+declare interface UIScriptCache {
+  code?: string;
+  desc: string;
+  lowerName: string;
+  /** Name search result for highlighting the match */
+  mark?: RegExpExecArray;
+  name: string;
+  /** Search result grouping priority, 0: hide, 1: code, 2: desc, 3: tag, 4: name */
+  show?: number;
+  size: string;
+  sizeNum: number;
+  sizes: string;
+  sizesNum: number[];
+  storageSize: number;
+  tag: string | string[];
+}
+
+declare interface UIScript extends VMScript {
+  $cache: Partial<UIScriptCache>;
+  $canUpdate: 1 | -1 | void;
+  safeIcon: string | null;
+  noIcon: '' | null;
 }
 
 declare interface VMScriptSourceOptions extends DeepPartial<Omit<VMScript, 'inferred'>> {
@@ -280,6 +311,8 @@ declare interface VMInjection extends VMInjectionDisabled, VMInjectionFlags {
   page: boolean;
   scripts: VMInjection.Script[];
   sessionId: string;
+  /** show GM_registerMenuCommand in context menu */
+  useMenu: boolean;
 }
 
 /**
@@ -318,9 +351,11 @@ declare namespace VMInjection {
    */
   interface Bag {
     csReg?: Promise<browser.contentScripts.RegisteredContentScript>;
+    csStop?: Function;
     forceContent?: boolean;
     inject: VMInjection;
     more: EnvDelayed;
+    url?: string;
   }
   interface Info {
     gmi: {
@@ -396,9 +431,8 @@ declare type VMSearchOptions = {
 /** Throws on error */
 declare type VMStorageFetch = (
   url: string,
-  /** 'res' makes the function resolve with the result */
-  options?: VMReq.Options | 'res',
-) => Promise<void>
+  options?: VMReq.Options,
+) => Promise<string>
 
 /** Augmented by handleCommandMessage in messages from the content script */
 declare interface VMMessageSender extends chrome.runtime.MessageSender {
@@ -414,5 +448,25 @@ declare type VMMessageTargetFrame = { frameId?: number } | { documentId?: string
  * 4 = pre-rendered top-page post-reification
  */
 declare type VMTopRenderMode = 0 | 1 | 2 | 3 | 4;
+
+declare var __: {
+  CODEMIRROR_THEMES: string;
+  DEBUG: boolean,
+  DEV: boolean,
+  /** An extension context with full access to chrome API i.e. not offscreen, content */
+  EXT: boolean,
+  MV3: boolean;
+  INIT_FUNC_NAME: string;
+  INJECTED: string | false;
+  SW: boolean;
+  SW_CLIENT: boolean;
+  SYNC_DROPBOX_CLIENT_ID: string,
+  SYNC_GOOGLE_DESKTOP_ID: string,
+  SYNC_GOOGLE_DESKTOP_SECRET: string,
+  SYNC_ONEDRIVE_ACCOUNT_TYPE: string,
+  SYNC_ONEDRIVE_CLIENT_ID: string,
+  TEST: boolean,
+  VM_VER: string,
+};
 
 //#endregion Generic

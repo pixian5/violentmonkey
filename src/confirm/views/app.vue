@@ -116,19 +116,19 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import Tooltip from 'vueleton/lib/tooltip';
-import Icon from '@/common/ui/icon';
 import {
   debounce, getFullUrl, getLocaleString, getScriptHome, i18n, isRemote, makePause, sendCmdDirectly,
   trueJoin,
 } from '@/common';
 import { keyboardService, modifiers } from '@/common/keyboard';
 import initCache from '@/common/cache';
-import VmExternals from '@/common/ui/externals';
-import SettingCheck from '@/common/ui/setting-check';
 import { loadScriptIcon } from '@/common/load-script-icon';
 import { deepEqual, objectPick } from '@/common/object';
 import { route } from '@/common/router';
 import { externalEditorInfoUrl } from '@/common/ui';
+import Icon from '@/common/ui/icon';
+import SettingCheck from '@/common/ui/setting-check';
+import VmExternals from '@/common/ui/externals';
 
 const KEEP_INFO_DELAY = 5000;
 const RETRY_DELAY = 3000;
@@ -214,7 +214,7 @@ onMounted(async () => {
   Object.defineProperty(window, FSH, { set: loadNewFileHandle });
   infoVal = info.value = fileHandle
     ? { url: fileHandle._url || DROP_PREFIX + fileHandle.name }
-    : await sendCmdDirectly('CacheLoad', key);
+    : await sendCmdDirectly('CacheLoad', key) || false/* for `info.XXX` in the template */;
   if (!infoVal) {
     closeTab();
     return;
@@ -386,7 +386,11 @@ async function loadDeps() {
   }
 }
 function closeTab() {
-  sendCmdDirectly('TabClose');
+  if (__.MV3 && history.length) {
+    chrome.tabs.goBack();
+  } else {
+    sendCmdDirectly('TabClose');
+  }
 }
 async function getFile(url, opts) {
   const { isBlob, useCache } = opts || {};

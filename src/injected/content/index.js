@@ -13,31 +13,31 @@ const { [IDS]: ids } = bridge;
 // Make sure to call obj::method() in code that may run after CONTENT userscripts
 async function init() {
   const isXml = document instanceof XMLDocument;
-  const xhrData = getXhrInjection();
+  const canReg = __.MV3 || IS_FIREFOX && Event[PROTO].composedPath;
+  /** Could be a DOM element with an `id` attribute equal to ours */
+  const regRaw = canReg && global[VIOLENTMONKEY];
+  const regData = regRaw?.[kSessionId] && delete global[VIOLENTMONKEY] && regRaw;
+  const xhrData = !regData && getXhrInjection();
   const dataPromise = sendCmd('GetInjected', {
     /* In FF93 sender.url is wrong: https://bugzil.la/1734984,
      * in Chrome sender.url is ok, but location.href is wrong for text selection URLs #:~:text= */
-    url: IS_FIREFOX && location.href,
+    url: !__.MV3 && IS_FIREFOX && location.href,
     // XML document's appearance breaks when script elements are added
     [FORCE_CONTENT]: isXml,
-    done: !!(xhrData || global.vmData),
+    done: !!(regData || xhrData),
   }, {
     retry: true,
   });
   // detecting if browser.contentScripts is usable, it was added in FF59 as well as composedPath
   /** @type {VMInjection} */
-  const data = xhrData || (
-    IS_FIREFOX && Event[PROTO].composedPath
-      ? await getDataFF(dataPromise)
-      : await dataPromise
-  );
+  const data = regData || xhrData || await (canReg ? getRegistration(dataPromise) : dataPromise);
   const info = data.info;
   const injectInto = bridge[INJECT_INTO] = data[INJECT_INTO];
   assign(ids, data[IDS]);
-  if (IS_FIREFOX && !data.clipFF) {
+  if (!__.MV3 && IS_FIREFOX && !data.clipFF) {
     off('copy', onClipboardCopy, true);
   }
-  if (IS_FIREFOX && info) { // must redefine now as it's used by injectPageSandbox
+  if (!__.MV3 && IS_FIREFOX && info) { // must redefine now as it's used by injectPageSandbox
     IS_FIREFOX = parseFloat(info.ua.browserVersion); // eslint-disable-line no-global-assign
   }
   if (data[EXPOSE] != null && !isXml && injectPageSandbox(data)) {
@@ -45,6 +45,7 @@ async function init() {
     bridge.post('Expose', data[EXPOSE]);
   }
   if (objectKeys(ids).length) {
+    bridge[kUseMenu] = data[kUseMenu];
     onScripts.forEach(fn => fn(data));
     await injectScripts(data, info, isXml);
   }
@@ -54,6 +55,7 @@ async function init() {
 
 addBackgroundHandlers({
   [VIOLENTMONKEY]: () => true,
+  Stop: stop,
 }, true);
 
 addBackgroundHandlers({
@@ -79,16 +81,17 @@ addHandlers({
   UpdateValue: REIFY,
 });
 
-init().catch(IS_FIREFOX && logging.error); // Firefox can't show exceptions in content scripts
+init().catch(!__.MV3 && IS_FIREFOX && logging.error);
+// Firefox can't show exceptions in content scripts
 
-async function getDataFF(viaMessaging) {
-  // global !== window in FF content scripts
-  const data = global.vmData || await SafePromise.race([
-    new SafePromise(resolve => { global.vmResolve = resolve; }),
+async function getRegistration(viaMessaging) {
+  if (__.DEBUG) viaMessaging.then(console.info.bind(null, 'GetInjected'));
+  const data = await SafePromise.race([
+    // global !== window in FF content scripts
+    new SafePromise(resolve => { global[VIOLENTMONKEY] = resolve; }),
     viaMessaging,
   ]);
-  delete global.vmResolve;
-  delete global.vmData;
+  delete global[VIOLENTMONKEY];
   return data;
 }
 

@@ -19,7 +19,7 @@ const globalKeys = (function makeGlobalKeys() {
   for (const key of names) {
     if (+key >= 0 && key < numFrames
       || isContentMode && (
-        key === process.env.INIT_FUNC_NAME || key === 'browser' || key === 'chrome'
+        key === __.INIT_FUNC_NAME || key === 'browser' || key === 'chrome'
       )
     ) {
       ok = false;
@@ -50,7 +50,8 @@ const globalKeys = (function makeGlobalKeys() {
     });
   }
   // wrappedJSObject is not included in getOwnPropertyNames so we add it explicitly.
-  if (IS_FIREFOX
+  if (!__.MV3
+  && IS_FIREFOX
   && !PAGE_MODE_HANDSHAKE
   && kWrappedJSObject in global
   && !globalKeysSet.get(kWrappedJSObject)) {
@@ -76,7 +77,7 @@ const updateGlobalDesc = name => {
     && describeProperty(src = src > 0 ? window : global, name);
   if (!desc) return;
   if (!descFn) setPrototypeOf(desc, null);
-  else if (process.env.DEV && getPrototypeOf(desc)) throw 'proto must be null';
+  else if (__.DEV && getPrototypeOf(desc)) throw 'proto must be null';
   /* ~45 enumerable action functions belong to `window` and need to be bound to it,
    * the non-enum ~10 can be unbound, and `eval` MUST be unbound to run in scope. */
   if (descFn) {
@@ -217,7 +218,7 @@ function setWindowEvent(desc, name, events, wrapper) {
       // like console.log set by another script
       window::on(name, events[name] = (
         // FF chokes on safeBind because the result belongs to Vault's window
-        IS_FIREFOX && PAGE_MODE_HANDSHAKE
+        !__.MV3 && IS_FIREFOX && PAGE_MODE_HANDSHAKE
           ? evt => wrapper::fn(evt)
           : safeBind(fn, wrapper)
       ));

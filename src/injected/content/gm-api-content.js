@@ -11,6 +11,10 @@ let isPopupShown;
 let grantlessUsage;
 
 addBackgroundHandlers({
+  [kUseMenu](state) {
+    bridge[kUseMenu] = state;
+    if (state) sendSetPopup();
+  },
   async PopupShown(state) {
     await bridge[REIFY];
     isPopupShown = state;
@@ -69,5 +73,7 @@ export async function sendSetPopup(isDelayed) {
       grantless: grantlessUsage,
       menus,
     });
+  } else if (bridge[kUseMenu]) {
+    await sendCmd('SetMenus', menus);
   }
 }

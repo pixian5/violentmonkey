@@ -11,11 +11,12 @@ import {
   setConfig,
   setSyncOnceMode,
   sync,
-} from './base';
+} from './sync-engine';
 import './dropbox';
 import './googledrive';
 import './onedrive';
 import './webdav';
+import './s3';
 
 const keysToSyncRe = new RegExp(`^(?:${[S_SCRIPT_PRE, S_CODE_PRE].join('|')})`);
 let unwatch;
@@ -48,7 +49,7 @@ function reconfigure() {
   }
 }
 
-function dbSentry({ keys }) {
+function dbSentry(keys) {
   for (const k of keys) {
     if (keysToSyncRe.test(k)) {
       autoSync();

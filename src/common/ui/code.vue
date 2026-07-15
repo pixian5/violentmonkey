@@ -144,6 +144,8 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  /** forcefully set the editor's contents to `value` even if the prop is unchanged */
+  reset: Number,
   mode: String,
   commands: {
     type: Object,
@@ -208,9 +210,9 @@ defineExpose({
   expandKeyMap,
 });
 
-function updateValue(val = props.value) {
+function updateValue(val = [props.value]) {
   cm?.operation(() => {
-    cm.setValue(val);
+    cm.setValue(val[0]);
     cm.clearHistory();
     cm.markClean();
   });
@@ -502,7 +504,7 @@ watch(() => props.active, onActive);
 watch(() => props.mode, value => {
   cm.setOption('mode', value || cmDefaults.mode);
 });
-watch(() => props.value, updateValue);
+watch(() => [props.value, props.reset], updateValue);
 
 onMounted(() => {
   let userOpts = options.get('editor');

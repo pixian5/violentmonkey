@@ -5,6 +5,7 @@ export const kEditAsString = 'editAsString';
 export const kFiltersPopup = 'filtersPopup';
 export const kGmCookieHttpOnly = 'gmCookieHttpOnly';
 export const kKillTrailingSpaceOnSave = 'killTrailingSpaceOnSave';
+export const kPageMenuCommands = 'pageMenuCommands';
 export const kPopupWidth = 'popupWidth';
 export const kShowTrailingSpace = 'showTrailingSpace';
 export const kScriptTemplate = 'scriptTemplate';
@@ -31,6 +32,7 @@ export default {
   [kPopupWidth]: 320,
   [kUpdateEnabledScriptsOnly]: true,
   [kGmCookieHttpOnly]: false,
+  [kPageMenuCommands]: false,
   autoUpdate: 1, // days, 0 = disable
   // ignoreGrant: false,
   lastUpdate: 0,
@@ -48,6 +50,7 @@ export default {
   closeAfterInstall: false,
   editAfterInstall: false,
   helpForLocalFile: true,
+  /** Show GM_registerMenuCommand entries in the page/frame context menu (disabled by default). */
   trackLocalFile: false,
   autoReload: false,
   features: null,
@@ -94,12 +97,14 @@ export default {
 // ==UserScript==
 // @name        New script {{name}}
 // @namespace   ${VIOLENTMONKEY} Scripts
-// @match       {{url}}
 // @icon        {{icon}}
+// @version     1.0.0
+//
+// @match       {{url}}
 // @grant       none
-// @version     1.0
+//
 // @author      -
-// @description {{date}}
+// @description
 // ==/UserScript==
 `,
   showAdvanced: true,

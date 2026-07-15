@@ -1,6 +1,6 @@
 const fs = require('fs').promises;
 const gulp = require('gulp');
-const del = require('del');
+const del = require('del').deleteAsync;
 const log = require('fancy-log');
 const plumber = require('gulp-plumber');
 const Sharp = require('sharp');
@@ -9,12 +9,12 @@ const i18n = require('./scripts/i18n');
 const { getVersion, isBeta } = require('./scripts/version-helper');
 const { buildManifest } = require('./scripts/manifest-helper');
 const pkg = require('./package.json');
+const { MV3, DIST } = require('./scripts/common');
 
-const DIST = 'dist';
 const paths = {
   manifest: 'src/manifest.yml',
   locales: [
-    'src/_locales/**',
+    '_locales/**',
   ],
   templates: [
     'src/**/*.@(js|html|json|yml|vue)',
@@ -49,16 +49,14 @@ function runCommand(command, args) {
   });
 }
 
-/**
- * manifest is already handled in ListBackgroundScriptsPlugin
- *
- * This task is only used to tweak dist/manifest.json without rebuilding
- */
 async function manifest() {
-  const base = JSON.parse(await fs.readFile(`${DIST}/manifest.json`, 'utf8'));
-  const data = await buildManifest(base);
+  const data = await buildManifest();
+  if (!MV3) {
+    const base = JSON.parse(await fs.readFile(`${DIST}/manifest.json`, 'utf8'));
+    data.background.scripts = base.background.scripts; // preserving ListBackgroundScriptsPlugin
+  }
   await fs.mkdir(DIST).catch(() => {});
-  await fs.writeFile(`${DIST}/manifest.json`, JSON.stringify(data), 'utf8');
+  await fs.writeFile(`${DIST}/manifest.json`, JSON.stringify(data, null, 2), 'utf8');
 }
 
 async function createIcons() {
@@ -124,14 +122,14 @@ async function bump() {
 
 function checkI18n() {
   return i18n.read({
-    base: 'src/_locales',
+    base: '_locales',
     extension: '.json',
   });
 }
 
 function copyI18n() {
   return i18n.read({
-    base: 'src/_locales',
+    base: '_locales',
     touchedOnly: true,
     useDefaultLang: true,
     markUntouched: false,
@@ -142,21 +140,21 @@ function copyI18n() {
 }
 
 /**
- * Load locale files (src/_locales/<lang>/message.[json|yml]), and
+ * Load locale files (_locales/<lang>/message.[json|yml]), and
  * update them with keys in template files, then store in `message.yml`.
  */
 function updateI18n() {
   return gulp.src(paths.templates)
   .pipe(plumber(logError))
   .pipe(i18n.extract({
-    base: 'src/_locales',
+    base: '_locales',
     manifest: 'src/manifest.yml',
     touchedOnly: false,
     useDefaultLang: false,
     markUntouched: true,
     extension: '.yml',
   }))
-  .pipe(gulp.dest('src/_locales'));
+  .pipe(gulp.dest('_locales'));
 }
 
 function logError(err) {
@@ -164,15 +162,7 @@ function logError(err) {
   return this.emit('end');
 }
 
-function copyZip() {
-  return gulp.src([
-    'node_modules/@zip.js/zip.js/dist/zip-no-worker.min.js',
-    'node_modules/@zip.js/zip.js/dist/z-worker.js',
-  ])
-  .pipe(gulp.dest(`${DIST}/public/lib`));
-}
-
-const pack = gulp.parallel(createIcons, copyI18n, copyZip);
+const pack = gulp.parallel(createIcons, copyI18n, ...MV3 ? [manifest] : []);
 
 exports.clean = clean;
 exports.manifest = manifest;

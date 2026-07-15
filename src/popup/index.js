@@ -1,8 +1,7 @@
-import '@/common/browser';
 import { i18n, sendCmdDirectly } from '@/common';
 import handlers from '@/common/handlers';
 import { loadCommandIcon, loadScriptIcon } from '@/common/load-script-icon';
-import { mapEntry } from '@/common/object';
+import { forEachValue, mapEntry } from '@/common/object';
 import { render } from '@/common/ui';
 import '@/common/ui/style';
 import App from './views/app';
@@ -45,8 +44,8 @@ async function setPopup(data, { [kFrameId]: frameId, url }) {
   else {
     store[IS_APPLIED] = data[INJECT_INTO] !== 'off'; // isApplied at the time of GetInjected
   }
-  // Ensuring top script's menu wins over a per-frame menu with different commands
-  const commands = store.commands = Object.assign(data.menus, !isTop && store.commands);
+  const depth = isTop ? 0 : 1;
+  const menus = Object.assign(store.menus[depth], data.menus);
   const idMapAllFrames = store.idMap;
   const idMapMain = idMapAllFrames[0] || (idMapAllFrames[0] = {});
   const idMapOld = idMapAllFrames[frameId] || (idMapAllFrames[frameId] = {});
@@ -54,29 +53,29 @@ async function setPopup(data, { [kFrameId]: frameId, url }) {
   const ids = Object.keys(idMap).map(Number);
   if (ids.length) {
     Object.assign(idMapOld, idMap);
-    // frameScripts may be appended multiple times if iframes have unique scripts
-    const { frameScripts } = store;
-    const scope = isTop ? store[SCRIPTS] : frameScripts;
+    const scope = store[SCRIPTS][depth];
     const { grantless } = data;
     const metas = data[SCRIPTS]?.filter(({ props: { id } }) => ids.includes(id))
       || (Object.assign(data, await sendCmdDirectly('GetData', { ids })))[SCRIPTS];
     metas.forEach(script => {
-      loadScriptIcon(script, data);
       let v;
       const { id } = script.props;
       const state = idMap[id];
+      const content = script.c = state === CONTENT && state;
       const more = state === MORE;
       const badRealm = state === ID_BAD_REALM;
       const renderedScript = scope.find(({ props }) => props.id === id);
       if (renderedScript) script = renderedScript;
       else if (isTop || !(id in idMapMain)) {
-        scope.push(script);
+        script = scope[scope.push(script) - 1]; // get the Vue-proxified script
         if (isTop) { // removing script from frameScripts if it ran there before the main frame
+          // frameScripts may be appended multiple times if iframes have unique scripts
+          const frameScripts = store[SCRIPTS][1];
           const i = frameScripts.findIndex(({ props }) => props.id === id);
           if (i >= 0) frameScripts.splice(i, 1);
         }
       }
-      script.runs = state === CONTENT || state === PAGE;
+      script.runs = content || state === PAGE;
       script.pageUrl = url; // each frame has its own URL
       script.failed = badRealm || state === ID_INJECTING || more;
       if (grantless && (v = grantless[id]) && delete v.window && (v = Object.keys(v).join(', '))) {
@@ -87,13 +86,11 @@ async function setPopup(data, { [kFrameId]: frameId, url }) {
       if (badRealm && !store.injectionFailure) {
         store.injectionFailure = { fixable: data[INJECT_INTO] === PAGE };
       }
+      loadScriptIcon(script, data);
+      menus[id]::forEachValue(cmd => {
+        loadCommandIcon(cmd, store);
+      });
     });
-  }
-  for (const scriptId in commands) {
-    const scriptCommands = commands[scriptId];
-    for (const id in scriptCommands) {
-      loadCommandIcon(scriptCommands[id], store);
-    }
   }
   if (isTop) mutexResolve(); // resolving at the end after all `await` above are settled
   if (!hPrev) {
@@ -115,7 +112,7 @@ function initMutex(delay = 100) {
 async function initialize() {
   initMutex();
   Object.assign(store, emptyStore());
-  const response = await sendCmdDirectly('InitPopup');
+  const response = BGDATA.popup || await sendCmdDirectly('InitPopup');
   let [cached, data, failureInfo] = Array.isArray(response) ? response : [];
   let [failure, reason, reason2] = Array.isArray(failureInfo)
     ? failureInfo
@@ -139,7 +136,7 @@ async function initialize() {
     failureText: failure,
   });
   if (cached) {
-    for (const id in cached) handlers.SetPopup(...cached[id]);
+    for (const id in cached) setPopup(...cached[id]);
   }
   if (!port) {
     port = browser.runtime.connect({ name: `Popup:${cached ? 'C' : ''}:${data.tab?.id ?? ''}` });

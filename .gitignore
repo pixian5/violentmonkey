@@ -1,7 +1,8 @@
-/dist/
+/dist*/
 node_modules/
 *.log
 .eslintcache
+.DS_Store
 /stats.json
 /tmp/
 /dist-assets/

@@ -1,26 +1,18 @@
 // SAFETY WARNING! Exports used by `injected` must make ::safe() calls and use __proto__:null
 
-import { browser } from './consts';
+import browser from './browser';
 import { deepCopy } from './object';
+import { noop } from './util';
+import { sendCmdToSW } from './sw-messaging';
 
 export { normalizeKeys } from './object';
 export * from './script';
 export * from './string';
 export * from './util';
 
-if (process.env.DEV && process.env.IS_INJECTED !== 'injected-web') {
-  const get = () => {
-    throw 'Do not use `for-of` with Map/Set. Use forEach or for-of with a [...copy]'
-    + '\n(not supported due to our config of @babel/plugin-transform-for-of).';
-  };
-  for (const obj of [Map, Set, WeakMap, WeakSet]) {
-    Object.defineProperty(obj.prototype, 'length', { get, configurable: true });
-  }
-}
-
 export const ignoreChromeErrors = () => chrome.runtime.lastError;
-export const browserWindows = !process.env.IS_INJECTED && browser.windows;
-export const defaultImage = !process.env.IS_INJECTED && `${ICON_PREFIX}128.png`;
+export const browserWindows = !__.INJECTED && browser.windows;
+export const defaultImage = !__.INJECTED && `${ICON_PREFIX}128.png`;
 /** @return {'0' | '1' | ''} treating source as abstract truthy/falsy to ensure consistent result */
 const PORT_ERROR_RE = /(Receiving end does not exist)|The message port closed before|moved into back\/forward cache|$/;
 
@@ -46,7 +38,7 @@ export function initHooks() {
  */
 export function sendCmd(cmd, data, options) {
   // Firefox+Vue3 bug workaround for "Proxy object could not be cloned"
-  if (!process.env.IS_INJECTED && IS_FIREFOX && window._bg !== 1 && isObject(data)) {
+  if (!__.MV3 && !__.INJECTED && IS_FIREFOX && global._bg !== 1 && isObject(data)) {
     data = deepCopy(data);
   }
   return sendMessage({ cmd, data }, options);
@@ -79,6 +71,11 @@ export const getBgPage = () => (
  * WARNING! Make sure `cmd` handler doesn't use `src` or `cmd` is listed in COMMANDS_WITH_SRC.
  */
 export function sendCmdDirectly(cmd, data, options, fakeSrc) {
+  if (__.MV3) {
+    return COMMANDS_WITH_SRC.includes(cmd)
+      ? sendCmd(cmd, data, options)
+      : sendCmdToSW(cmd, data, fakeSrc && {...fakeSrc, fake: true});
+  }
   const bgMaybe = !COMMANDS_WITH_SRC.includes(cmd) && getBgPage();
   const handle = bg => {
     const bgCopy = bg && bg !== window && bg.deepCopy;
@@ -132,7 +129,7 @@ export function sendMessage(payload, { retry } = {}) {
   if (retry) return sendMessageRetry(payload);
   let promise = browser.runtime.sendMessage(payload);
   // Ignoring errors when sending from the extension script because it's a broadcast
-  if (!process.env.IS_INJECTED) {
+  if (!__.INJECTED) {
     promise = promise.catch(ignoreNoReceiver);
   }
   return promise;
@@ -157,7 +154,7 @@ export async function sendMessageRetry(payload, maxDuration = 10e3) {
       }
     }
     // Not using setTimeout which may be cleared by the web page
-    await browser.storage.local.get(VIOLENTMONKEY);
+    if (!__.MV3) await browser.storage.local.get(VIOLENTMONKEY);
   }
   throw new Error(VIOLENTMONKEY + ' cannot connect to the background page.');
 }
@@ -168,23 +165,51 @@ export function ignoreNoReceiver(err) {
   }
 }
 
-export async function getActiveTab(windowId = -2 /*chrome.windows.WINDOW_ID_CURRENT*/) {
-  return (
-    await browser.tabs.query({
-      active: true,
-      [kWindowId]: windowId,
-    })
-  )[0] || browserWindows && (
-    // Chrome bug workaround when an undocked devtools window is focused
-    await browser.tabs.query({
-      active: true,
-      [kWindowId]: (await browserWindows.getCurrent()).id,
-    })
-  )[0];
+/** @return {chrome.tabs.Tab | void} */
+export function getTab(tabId) {
+  return browser.tabs.get(tabId).catch(noop);
 }
 
-export function makePause(ms) {
-  return ms < 0
-    ? Promise.resolve()
-    : new Promise(resolve => setTimeout(resolve, ms));
+/** @return {Promise<chrome.tabs.Tab | void>} */
+export async function getActiveTab(windowId = -2 /*chrome.windows.WINDOW_ID_CURRENT*/) {
+  let [res] = await browser.tabs.query({ active: true, [kWindowId]: windowId });
+  // Chrome bug workaround when an undocked devtools window is focused
+  if (!res && browserWindows && (res = await browserWindows.getCurrent().catch(noop))) {
+    [res] = await browser.tabs.query({ active: true, [kWindowId]: res.id });
+  }
+  return res;
+}
+
+let keepAliveChain, keepAliveTimer;
+
+/**
+ * @template T
+ * @param {T} [promise]
+ * @return {T | ((v?: any) => void)} original promise or a new promise's resolver
+ */
+export function keepAlive(promise) {
+  let res = promise;
+  if (!res) ({promise, resolve: res} = Promise.withResolvers());
+  const chain = keepAliveChain = keepAliveChain ? keepAliveChain.finally(() => promise) : promise;
+  keepAliveChain.finally(() => {
+    if (keepAliveChain === chain) {
+      clearInterval(keepAliveTimer);
+      keepAliveChain = keepAliveTimer = 0;
+    }
+  });
+  keepAliveTimer ||= setInterval(chrome.runtime.getPlatformInfo, 25e3);
+  return res;
+}
+
+/**
+ * @template T
+ * @param {number} [ms]
+ * @param {T} [arg] - resolved value of the Promise
+ * @return {Promise<T>}
+ */
+export function makePause(ms, arg) {
+  const res = ms < 0
+    ? Promise.resolve(arg)
+    : new Promise(resolve => setTimeout(resolve, ms, arg));
+  return __.SW && ms > 0 ? keepAlive(res) : res;
 }

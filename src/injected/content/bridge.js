@@ -1,4 +1,4 @@
-import { browser } from '../util';
+import browser from '@/common/browser'; // eslint-disable-line no-restricted-imports
 import { sendCmd } from './util';
 
 const handlers = createNullObj();
@@ -30,6 +30,7 @@ export const addBackgroundHandlers = addHandlersImpl.bind({}, bgHandlers);
  * @property {VMBridgePostFunc} [post] - present only when the web bridge was initialized
  * @property {VMScriptInjectInto} [injectInto] - present only after GetInjected received data
  * @property {Promise<void>} [reify] - present in pre-rendered documents, resolved when it's shown
+ * @property {boolean} [useMenu]
  */
 const bridge = {
   __proto__: null,

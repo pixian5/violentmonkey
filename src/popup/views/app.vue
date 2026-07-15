@@ -57,7 +57,9 @@
       </div>
     </div>
     <div class="failure-reason" v-if="store.failureText">
-      <span v-text="store.failureText"/>
+      <a v-if="store.infoUrl" v-text="store.failureText" :tabindex="0" target="_blank"
+         :href="store.infoUrl"/>
+      <span v-else v-text="store.failureText"/>
       <code v-text="store.blacklisted" v-if="store.blacklisted" class="ellipsis inline-block"/>
     </div>
     <div v-if="showSettings && !IS_SAFARI" class="mb-1c menu settings">
@@ -85,10 +87,10 @@
           v-for="item in scope.list"
           :key="item.id"
           :class="{
-            disabled: !item.data.config.enabled,
-            failed: item.data.failed,
-            removed: item.data.config.removed,
-            runs: item.data.runs,
+            disabled: !item.config.enabled,
+            failed: item.failed,
+            removed: item.config.removed,
+            runs: item.runs,
             'extras-shown': extras === item,
             'excludes-shown': item.excludes,
           }"
@@ -101,22 +103,22 @@
             @keydown.enter.exact.stop="onEditScript(item)"
             @keydown.space.exact.stop="onToggleScript(item)"
             @click="onToggleScript(item)">
-            <img class="script-icon" :src="item.data.safeIcon">
-            <icon :name="getSymbolCheck(item.data.config.enabled)"></icon>
+            <img class="script-icon" :src="item.safeIcon">
+            <icon :name="getSymbolCheck(item.config.enabled)"></icon>
             <div class="script-name ellipsis"
                  @click.ctrl.exact.stop="onEditScript(item)"
                  @contextmenu.exact.stop.prevent="onEditScript(item)"
                  @mousedown.middle.exact.stop="onEditScript(item)">
-              <sup class="syntax" v-if="item.data.syntax" v-text="i18n('msgSyntaxError')"/>
+              <sup class="syntax" v-if="item.syntax" v-text="i18n('msgSyntaxError')"/>
               {{item.name}}
-              <a v-if="!store.failure && item.data.more"
+              <a v-if="!store.failure && item.more"
                  class="tardy" tabindex="0" :title="TARDY_MATCH"
                  @click.stop="note = note === TARDY_MATCH ? '' : TARDY_MATCH">
                 <Icon name="info"/>
               </a>
-              <a v-if="item.data.grantless"
-                 class="tardy" tabindex="0" :title="item.data.grantless"
-                 @click.stop="note = note === item.data.grantless ? '' : item.data.grantless">
+              <a v-if="item.grantless"
+                 class="tardy" tabindex="0" :title="item.grantless"
+                 @click.stop="note = note === item.grantless ? '' : item.grantless">
                 @
               </a>
             </div>
@@ -159,7 +161,7 @@
           <div class="submenu-commands">
             <div
               class="menu-item menu-area"
-              v-for="({ autoClose = true, safeIcon, text, title }, key) in store.commands[item.id]"
+              v-for="({ autoClose = true, safeIcon, text, title }, key) in store.menus[scope.depth][item.id]"
               :key
               :tabIndex
               :cmd.prop="[item.id, key, autoClose]"
@@ -201,11 +203,14 @@
            because iframes may run scripts even in non-injectable pages */"/>
     </div>
     <div v-if="extras" ref="$extras" class="extras-menu">
+      <code v-if="extras.c">
+        <a :href="VM_DOCS_INJECT_INTO" :data-message="INJECT_LEARN" v-bind="EXTERNAL_LINK_PROPS">content</a>
+      </code>
       <a v-for="[url, text] in activeLinks"
          :key="url" :href="url" :data-message="url" tabindex="0" v-text="text"
          v-bind="EXTERNAL_LINK_PROPS"/>
       <div v-text="i18n('menuExclude')" tabindex="0" @click="onExclude"/>
-      <div v-text="extras.data.config.removed ? i18n('buttonRestore') : i18n('buttonRemove')"
+      <div v-text="extras.config.removed ? i18n('buttonRestore') : i18n('buttonRemove')"
            tabindex="0"
            @click="onRemoveScript"/>
       <div v-if="'upd' in extras"
@@ -218,14 +223,14 @@
 
 <script setup>
 import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue';
-import { VM_DOCS_MATCHING } from '@/common/consts';
+import { VM_DOCS_INJECT_INTO, VM_DOCS_MATCHING } from '@/common/consts';
 import options from '@/common/options';
 import optionsDefaults, {
   kFiltersPopup, kPopupWidth, kUpdateEnabledScriptsOnly,
 } from '@/common/options-defaults';
 import {
-  getScriptHome, getScriptName, getScriptRunAt, getScriptSupportUrl, getScriptUpdateUrl,
-  i18n, makePause, sendCmdDirectly, sendTabCmd,
+  getScriptHome, getScriptName, getScriptRunAt, getScriptSupportUrl, getScriptUpdateUrl, i18n, makePause,
+  sendCmdDirectly, sendTabCmd,
 } from '@/common';
 import handlers from '@/common/handlers';
 import { objectPick } from '@/common/object';
@@ -233,15 +238,16 @@ import { EXTERNAL_LINK_PROPS, getActiveElement } from '@/common/ui';
 import Icon from '@/common/ui/icon';
 import SettingsPopup from '@/common/ui/settings-popup.vue';
 import { getSortCollator } from '@/common/ui/util';
-import { keyboardService, isInput, handleTabNavigation } from '@/common/keyboard';
+import { handleTabNavigation, isInput, kbdTypable, keyboardService } from '@/common/keyboard';
 import { isFullscreenPopup, store } from '../utils';
 
 let mousedownElement;
 let focusBug;
 const IS_SAFARI = process.env.TARGET === 'safari';
 const HOME = extensionManifest.homepage_url.split('/')[2];
-const NAME = `${extensionManifest.name} ${process.env.VM_VER}`;
+const NAME = `${extensionManifest.name} ${__.VM_VER}${__.MV3 ? ' MV3' : ''}`;
 const TARDY_MATCH = i18n('msgTardyMatch');
+const INJECT_LEARN = '@inject-into content\n' + i18n('learnInjectionMode');
 const SCRIPT_CLS = '.script';
 const RUN_AT_ORDER = ['start', 'body', 'end', 'idle'];
 const needsReload = reactive({});
@@ -254,7 +260,7 @@ const optionsData = reactive(objectPick(optionsDefaults, [
   kPopupWidth,
   kUpdateEnabledScriptsOnly,
 ]));
-const activeMenu = ref('scripts');
+const activeMenu = ref(SCRIPTS);
 const showSettings = ref();
 const extras = ref();
 const focusedItem = ref();
@@ -302,7 +308,7 @@ function reloadTab() {
   return browser.tabs.reload(store.tab.id);
 }
 function makeActiveLinks() {
-  const script = extras.value.data;
+  const script = extras.value;
   const support = getScriptSupportUrl(script);
   const home = !support && getScriptHome(script); // not showing homepage if supportURL exists
   return [
@@ -317,13 +323,13 @@ function makeInjectionScopes() {
   const enabledOnly = optionsData[kUpdateEnabledScriptsOnly];
   let updatableScripts;
   return [
-    injectable && ['scripts', i18n('menuMatchedScripts'), groupDisabled || null],
-    injectable && groupDisabled && ['disabled', i18n('menuMatchedDisabledScripts'), false],
-    ['frameScripts', i18n('menuMatchedFrameScripts')],
+    injectable && [0, SCRIPTS, i18n('menuMatchedScripts'), groupDisabled || null],
+    injectable && groupDisabled && [0, 'disabled', i18n('menuMatchedDisabledScripts'), false],
+    [1, 'frameScripts', i18n('menuMatchedFrameScripts')],
   ]
   .filter(Boolean)
-  .map(([name, title, groupByEnabled]) => {
-    let list = store[name] || store.scripts;
+  .map(([depth, name, title, groupByEnabled]) => {
+    let list = store[SCRIPTS][depth];
     if (groupByEnabled != null) {
       list = list.filter(script => !script.config.enabled === !groupByEnabled);
     }
@@ -340,9 +346,9 @@ function makeInjectionScopes() {
       const { enabled, removed, shouldUpdate } = script.config;
       const upd = !removed && getScriptUpdateUrl(script, { enabledOnly });
       const item = {
+        ...script,
         id,
         name: scriptName,
-        data: script,
         key: `${
           enabledFirst && +!enabled
         }${
@@ -362,6 +368,7 @@ function makeInjectionScopes() {
       return item;
     }).sort((a, b) => collator.compare(a.key, b.key));
     return numTotal && {
+      depth,
       name,
       title,
       list,
@@ -391,7 +398,7 @@ function toggleMenu(name) {
 async function showExtras(evt) {
   const el = evt.currentTarget; // get element with @click, not the inner stuff like icon
   const item = el._item;
-  const isPerItem = item.data;
+  const isPerItem = item.id;
   const what = isPerItem ? extras : topExtras;
   if (!what.value) {
     evt.stopPropagation(); // prevent app's @click from resetting extras and topExtras
@@ -433,7 +440,7 @@ function onOpenUrl(e) {
   sendCmdDirectly('TabOpen', { url: el.href }).then(close);
 }
 function onEditScript(item) {
-  sendCmdDirectly('OpenEditor', item.data.props.id).then(close);
+  sendCmdDirectly('OpenEditor', item.props.id).then(close);
 }
 function onCommand(evt) {
   const { type, currentTarget: el } = evt;
@@ -453,7 +460,7 @@ function onCommand(evt) {
   }
 }
 function onToggleScript(item) {
-  const { data } = item;
+  const data = item;
   const enabled = !data.config.enabled;
   const { id } = data.props;
   sendCmdDirectly('UpdateScriptInfo', {
@@ -515,20 +522,20 @@ async function onInjectionFailureFix() {
   window.close();
 }
 function onRemoveScript() {
-  const { config, props: { id } } = extras.value.data;
+  const { config, props: { id } } = extras.value;
   const removed = +!config.removed;
   config.removed = removed;
   sendCmdDirectly('MarkRemoved', { id, removed });
 }
 function onUpdateScript() {
-  sendCmdDirectly('CheckUpdate', { ids: [extras.value.data.props.id] });
+  sendCmdDirectly('CheckUpdate', { ids: [extras.value.props.id] });
 }
 function onUpdateListed() {
   sendCmdDirectly('CheckUpdate', { ids: Object.keys(store.updatableScripts).map(Number) });
 }
 async function onExclude() {
   const item = extras.value;
-  const { data } = item;
+  const data = item;
   const url = data.pageUrl;
   const { host, domain } = await sendCmdDirectly('GetTabDomain', url);
   item.excludes = [
@@ -544,10 +551,10 @@ function onExcludeClose(item) {
 }
 async function onExcludeSave(item, btn) {
   await sendCmdDirectly('UpdateScriptInfo', {
-    id: item.data.props.id,
+    id: item.props.id,
     custom: {
       excludeMatch: [
-        ...item.data.custom.excludeMatch || [],
+        ...item.custom.excludeMatch || [],
         ...[btn || item.excludes[0].trim()].filter(Boolean),
       ],
     },
@@ -624,16 +631,15 @@ onMounted(() => {
     keyboardService.register('tab', () => handleTabNavigation(1));
     keyboardService.register('s-tab', () => handleTabNavigation(-1));
   }
+  const opts = { condition: '!' + kbdTypable };
   for (const key of ['up', 'down', 'left', 'right']) {
     keyboardService.register(key,
       navigate.bind(null, key[0]),
-      { condition: '!inputFocus' });
+      opts);
   }
   keyboardService.register('e', () => {
     onEditScript(focusedItem.value);
-  }, {
-    condition: '!inputFocus',
-  });
+  }, opts);
 });
 
 onActivated(() => {

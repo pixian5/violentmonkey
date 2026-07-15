@@ -48,7 +48,9 @@ export const { stopImmediatePropagation } = Event[PROTO];
 export const getDetail = describeProperty(SafeCustomEvent[PROTO], 'detail').get;
 export const getRelatedTarget = describeProperty(SafeMouseEvent[PROTO], 'relatedTarget').get;
 export const logging = nullObjFrom(console);
-export const VM_UUID = chrome.runtime.getURL('');
+export const VM_UUID = __.MV3
+  ? `chrome-extension://${chrome.runtime.id}/`
+  : chrome.runtime.getURL('');
 /** Unlike the built-in `instanceof` operator this doesn't call @@hasInstance which may be spoofed */
 export const isInstance = (instance, safeOriginalProto) => {
   for (let obj = instance; isObject(obj) && (obj = getPrototypeOf(obj));) {
@@ -63,7 +65,7 @@ export const isPromise = (proto => val => isInstance(val, proto))(SafePromise[PR
 const { document } = global;
 export const { getElementsByTagName } = document;
 export const REIFY = 'reify';
-export let IS_FIREFOX = global !== window; // true in Firefox content script context
+export let IS_FIREFOX = !__.MV3 && global !== window; // true in Firefox content script context
 /** @type {VMTopRenderMode} */
 export let topRenderMode = window !== top ? 0
   // TODO: revisit when link-preview is shipped in Chrome

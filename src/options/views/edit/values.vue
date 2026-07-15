@@ -33,12 +33,14 @@
            @keydown.up.exact="onUpDown">
         <a
           ref="$editAll"
-          class="edit-values-row flex"
-          @click="onEditAll" tabindex="0" v-text="i18n('editValueAllHint')"/>
+          class="edit-values-row"
+          :class="{ active: current?.isAll }"
+          @click="onEditAll" tabindex="0" v-text="i18n('editValueAllHint')" :data-num="keys.length"/>
         <div
           v-for="key in pageKeys"
           :key
           class="edit-values-row flex monospace-font"
+          :class="{ active: key === current?.keyOrig }"
           @keydown.delete.ctrl.exact="onRemove(key)"
           @click="onEdit(key)">
           <div class="ellipsis">
@@ -52,14 +54,15 @@
         </div>
       </div>
       <div class="edit-values-empty mt-1" v-if="!loading && !keys.length" v-text="i18n('noValues')"/>
-      <h3 v-text="i18n('headerRecycleBin')" v-if="trash"/>
+      <h3 v-text="i18n('headerRecycleBin')" v-if="trash" :data-num="Object.keys(trash).length"/>
       <div class="edit-values-table trash monospace-font"
            @keydown.down.exact="onUpDown"
            @keydown.up.exact="onUpDown"
            :style="trashKeyWidthStyle"
            v-if="trash">
         <!-- eslint-disable-next-line vue/no-unused-vars -->
-        <div v-for="({ key, cut, len }, trashKey) in trash" :key="trashKey"
+        <div v-for="({ key, cut, len, t }, trashKey) in trash" :key="trashKey"
+             :title="t"
              class="edit-values-row flex"
              @click="onRestore(trashKey)">
           <a class="ellipsis" v-text="key" tabindex="0"/>
@@ -93,9 +96,9 @@
         <span v-text="i18n('valueLabelKey')"/>
         <input type="text" v-model="current.key" :readOnly
                ref="$key"
-               class="w-100"
+               class="w-100 monospace-font"
                spellcheck="false"
-               :class="{ dirty: current.dirty = current.dirty & ~1 | current.key !== current.keyOrig }">
+               :class="{ dirty: (current.dirty = current.dirty & ~1 | (k = current.key !== current.keyOrig), k) }">
       </label>
       <div>
         <label v-if="current.isAll" v-text="i18n('valueLabelValueAll')" for="edit-value"/>
@@ -109,6 +112,7 @@
         </locale-group>
         <vm-code
           :value="current.value"
+          :reset="resetEditor"
           :cm-options="cmOptions"
           ref="$value"
           class="h-100 mt-1"
@@ -164,6 +168,7 @@ const editAsString = ref();
 const editorValueShown = ref();
 const isActive = ref();
 const current = ref();
+const resetEditor = ref(0);
 const loading = ref(true);
 const page = ref();
 const values = ref();
@@ -206,7 +211,7 @@ let storageSentry;
 onActivated(() => {
   const root = $el.value;
   const { id } = props.script.props;
-  const bg = getBgPage();
+  const bg = !__.MV3 && getBgPage();
   root::addEventListener('focusin', onFocus);
   (current.value ? cm : focusedElement)?.focus();
   sendCmdDirectly('GetValueStore', id, undefined, sender = fakeSender()).then(data => {
@@ -371,6 +376,11 @@ async function updateValue(data, isSave) {
     data.keyOrig = key;
     if (key in valuesObj) addToTrash(key);
     if (renamed && keyOrig in valuesObj) addToTrash(keyOrig);
+    if (!data.isStr && editAsString.value && typeof jsonValue === 'string') {
+      data.isStr = true;
+      data.value = jsonValue;
+      if (!jsonValue) resetEditor.value++; // forcing because the old editor `value` is also ''
+    }
   }
   if (rawValue) valuesObj[key] = rawValue;
   else delete valuesObj[key];
@@ -387,8 +397,9 @@ function onNew() {
     isNew: true,
     key: '',
     value: '',
-    ...currentObservables,
   };
+  resetEditor.value++; // clearing any unsaved text in the editor with `value` of ''
+  onChange(false, ''); // set the error text for empty JSON
 }
 function addToTrash(
   key,
@@ -401,6 +412,7 @@ function addToTrash(
     rawValue,
     cut,
     len,
+    t: new Date().toLocaleTimeString(),
   };
 }
 function onRemove(key) {
@@ -419,6 +431,7 @@ function onRestore(trashKey) {
   updateValue(entry);
 }
 function onEdit(key) {
+  onCancel();
   const parsed = [];
   const value = getValue(key, false, parsed);
   const [jsonValue] = parsed;
@@ -455,6 +468,7 @@ async function onSave(arg) {
   if (arg !== K_OK) {
     cm.markClean();
     cur.dirty = 0;
+    cur.isNew = false;
   } else {
     current.value = null;
   }
@@ -470,21 +484,20 @@ async function onSave(arg) {
 }
 function onCancel() {
   const cur = current.value;
-  if (cur.dirty) {
+  if (cur?.dirty) {
     const str = cm.getValue().trim();
     const {jsonValue = str} = cur;
     addToTrash(cur.key, dumpScriptValue(jsonValue), cutLength(str));
   }
-  current.value = null;
+  if (cur) current.value = null;
 }
-function onChange(isChanged) {
+function onChange(isChanged, str = cm.getValue()) {
   const cur = current.value;
   cur.dirty = cur.dirty & ~2 | 2 * isChanged;
   cur.error = null;
   const t0 = performance.now();
-  const str = cm.getValue().trim();
   try {
-    if (cur.isAll && str[0] !== '{') throw 'Expected { at position 0';
+    if (cur.isAll && !/^\s*{/.test(str)) throw 'Expected { at position 0';
     if (cur.jsonPaused) return;
     cur.jsonValue = cur.isStr && editAsString.value ? str : JSON.parse(str);
   } catch (e) {
@@ -539,17 +552,29 @@ $lightBorder: 1px solid var(--fill-2);
 .edit-values {
   gap: 1em;
   overflow: hidden;
+  .trash {
+    transition: opacity 0s .1s;
+    &:not(:hover) {
+      opacity: .5;
+    }
+  }
   @media (max-width: 1200px) {
+    &-panel {
+      flex: 1 1 100%;
+    }
     &[data-editing] {
       flex-direction: column;
       > :first-child {
-        flex: 0 1 min-content;
+        flex: 0 0 min-content;
         overflow-y: auto;
         max-height: 40vh;
         @media (max-height: 600px) {
           display: none;
         }
       }
+    }
+    .trash {
+      flex-shrink: 1000;
     }
   }
   nav {
@@ -573,8 +598,15 @@ $lightBorder: 1px solid var(--fill-2);
   &-row {
     border: $lightBorder;
     cursor: pointer;
+    &.active {
+      a&, > div:first-child {
+        background-color: hsla(210, 100%, 50%, .1);
+        font-weight: bold;
+      }
+    }
     .main > &:first-child {
       padding: 8px 6px;
+      display: block;
     }
     &:not(:first-child) {
       border-top: 0;
@@ -641,6 +673,7 @@ $lightBorder: 1px solid var(--fill-2);
       > input {
         margin: .25em 0;
         padding: .25em;
+        font-weight: bold;
       }
     }
   }

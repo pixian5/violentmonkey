@@ -26,7 +26,6 @@ html {
 }
 body {
   width: 320px;
-  max-width: 100%;
   /* Latest Chrome renders an extra blank for a nonexistent scrollbar */
   overflow: hidden;
   background: var(--fill-0-5);
@@ -255,6 +254,7 @@ footer {
   }
   &-button {
     padding: .5rem;
+    line-height: 1;
     background: var(--bg);
     cursor: pointer;
     &:focus {
@@ -346,6 +346,10 @@ footer {
       color: var(--bg);
       background: cornflowerblue;
     }
+  }
+  > code {
+    padding: .5rem 1rem;
+    border-bottom: 1px solid var(--fill-3);
   }
 }
 

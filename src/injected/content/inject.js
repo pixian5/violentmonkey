@@ -25,7 +25,7 @@ let VMInitInjection = window[INIT_FUNC_NAME];
  * The prop's mode is overridden to be unforgeable by a userscript in content mode. */
 setOwnProp(window, INIT_FUNC_NAME, 1, false);
 
-addHandlers({
+if (!__.MV3) addHandlers({
   /**
    * FF bug workaround to enable processing of sourceURL in injected page scripts
    */
@@ -41,7 +41,7 @@ export function injectPageSandbox(data) {
   const contentId = safeGetUniqId();
   const webId = safeGetUniqId();
   nonce = data.nonce;
-  if (IS_FIREFOX) {
+  if (!__.MV3 && IS_FIREFOX) {
     // In FF, content scripts running in a same-origin frame cannot directly call parent's functions
     window::on(VAULT_WRITER, evt => {
       evt::stopImmediatePropagation();
@@ -60,7 +60,7 @@ export function injectPageSandbox(data) {
   } else {
     setOwnProp(global, VAULT_WRITER, tellBridgeToWriteVault, false);
   }
-  if (useOpener(opener) || useOpener(window !== top && parent)) {
+  if (useOpener(opener) || useOpener(window !== top && parent, true)) {
     startHandshake();
   } else {
     /* Sites can do window.open(sameOriginUrl,'iframeNameOrNewWindowName').opener=null, spoof JS
@@ -69,24 +69,18 @@ export function injectPageSandbox(data) {
      * to use an iframe to extract the safe globals. Detection via document.referrer won't work
      * is it can be emptied by the opener page, too. */
     inject({ code: `parent["${vaultId}"] = [this, 0]`/* DANGER! See addVaultExports */ }, () => {
-      if (!IS_FIREFOX || addVaultExports(window[kWrappedJSObject][vaultId])) {
+      if (__.MV3 || !IS_FIREFOX || addVaultExports(window[kWrappedJSObject][vaultId])) {
         startHandshake();
       }
     });
   }
   return pageInjectable;
 
-  function useOpener(opener) {
-    let ok;
-    try {
-      ok = opener && describeProperty(opener.location, 'href').get;
-    } catch (e) {
-      // Old Chrome throws in sandboxed frames, TODO: remove `try` when minimum_chrome_version >= 86
-    }
+  function useOpener(opener, isFrame) {
+    let ok = opener && (isFrame ? frameElement : describeProperty(opener.location, 'href').get);
     if (ok) {
       ok = false;
-      // TODO: Use a single PointerEvent with `pointerType: vaultId` when strict_min_version >= 59
-      if (IS_FIREFOX) {
+      if (!__.MV3 && IS_FIREFOX) {
         const setOk = evt => { ok = evt::getDetail(); };
         window::on(VAULT_WRITER_ACK, setOk, true);
         try {
@@ -105,7 +99,7 @@ export function injectPageSandbox(data) {
    * Directly preventing it would require redefining ~20 DOM methods in the parent.
    * Instead, we'll send the ids via a temporary handshakeId event, to which the web-bridge
    * will listen only during its initial phase using vault-protected DOM methods.
-   * TODO: simplify this when strict_min_version >= 63 (attachShadow in FF) */
+   */
   function startHandshake() {
     /* With `once` the listener is removed before DOMNodeInserted is dispatched by appendChild,
      * otherwise a same-origin parent page could use it to spoof the handshake. */
@@ -137,9 +131,6 @@ export async function injectScripts(data, info, isXml) {
   if (errors) {
     logging.warn(errors);
   }
-  info.gmi = {
-    isIncognito: chrome.extension.inIncognitoContext,
-  };
   bridgeInfo = createNullObj();
   bridgeInfo[PAGE] = info;
   bridgeInfo[CONTENT] = info;
@@ -271,7 +262,7 @@ function inject(item, iframeCb) {
   const isCodeArray = isObject(code);
   const script = makeElem('script', !isCodeArray && code);
   // Firefox ignores sourceURL comment when a syntax error occurs so we'll print the name manually
-  const onError = IS_FIREFOX && !iframeCb && (e => {
+  const onError = !__.MV3 && IS_FIREFOX && !iframeCb && (e => {
     const { stack } = e[ERROR];
     if (!stack || `${stack}`.includes(VM_UUID)) {
       log(ERROR, [item.displayName + ':' + e.lineno + ':' + e.colno], e[ERROR]);
@@ -280,11 +271,7 @@ function inject(item, iframeCb) {
   });
   const div = makeElem('div');
   // Hiding the script's code from mutation events like DOMNodeInserted or DOMNodeRemoved
-  const divRoot = injectedRoot || (
-    attachShadow
-      ? div::attachShadow({ mode: 'closed' })
-      : div
-  );
+  const divRoot = injectedRoot || div::attachShadow({ mode: 'closed' });
   if (isCodeArray) {
     safeApply(append, script, code);
   }
@@ -299,7 +286,7 @@ function inject(item, iframeCb) {
       style: 'display:none!important',
     });
     /* In FF the opener receives DOMNodeInserted attached at creation so it can see window[0] */
-    if (!IS_FIREFOX) {
+    if (__.MV3 || !IS_FIREFOX) {
       divRoot::appendChild(iframe);
     }
   } else {
@@ -317,7 +304,7 @@ function inject(item, iframeCb) {
   }
   if (iframeCb) {
     injectedRoot = divRoot;
-    if (IS_FIREFOX) divRoot::appendChild(iframe);
+    if (!__.MV3 && IS_FIREFOX) divRoot::appendChild(iframe);
     // Can be removed in DOMNodeInserted by a hostile web page or CSP forbids iframes(?)
     if ((iframeDoc = iframe.contentDocument)) {
       iframeDoc::getElementsByTagName('*')[0]::appendChild(script);
@@ -349,7 +336,7 @@ function injectAll(runAt) {
         if (!grant.length) grantless[realm] = 1;
       }
       if (!inPage) nextTask()::then(() => tardyQueueCheck(items));
-      else if (!IS_FIREFOX) res = injectPageList(runAt);
+      else if (__.MV3 || !IS_FIREFOX) res = injectPageList(runAt);
     }
   }
   return res;

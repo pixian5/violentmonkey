@@ -22,20 +22,17 @@
   </div>
 </template>
 
-<script>
-import { ensureArray, getUniqId, i18n, makePause, sendCmdDirectly } from '@/common';
+<script setup>
+import { strFromU8, unzipSync } from 'fflate';
+import { ensureArray, getUniqId, i18n, makePause, readBlob, sendCmdDirectly } from '@/common';
 import { listenOnce } from '@/common/browser';
-import { RUN_AT_RE } from '@/common/consts';
+import { kOrigTag, kTag, RUN_AT_RE } from '@/common/consts';
 import options from '@/common/options';
-import loadZipLibrary from '@/common/zip';
 import { showConfirmation } from '@/common/ui';
 import {
-  kDownloadURL, kExclude, kInclude, kMatch, kOrigExclude, kOrigInclude, kOrigMatch,
-  runInBatch, store,
+  kComment, kDownloadURL, kExclude, kInclude, kMatch, kOrigExclude, kOrigInclude, kOrigMatch, runInBatch, store,
+  vmZipEntryName,
 } from '../../utils';
-</script>
-
-<script setup>
 import { onActivated, onMounted, reactive, ref } from 'vue';
 import SettingCheck from '@/common/ui/setting-check';
 
@@ -59,6 +56,7 @@ const i18nConfirmUndoImport = i18n('confirmUndoImport');
 const labelImportScriptData = i18n('labelImportScriptData');
 const labelImportSettings = i18n('labelImportSettings');
 const isPlainObject = val => val && typeof val === 'object' && !Array.isArray(val);
+const TM = 'Tampermonkey';
 
 let depsPortId;
 let undoPort;
@@ -135,11 +133,9 @@ function pickFile(accept, onPick) {
 }
 
 async function importBackup(file) {
-  if (store.batch) {
-    reportDebug('导入被批处理锁定');
-    return;
+  if (file && !store.batch) {
+    runInBatch(doImportBackup, await readBlob(file, true), file.name);
   }
-  runInBatch(doImportBackup, file);
 }
 
 async function importTextScript(file) {
@@ -239,86 +235,144 @@ async function importTextBackup(backup, fileName) {
   reportDebug('TXT 备份导入完成');
 }
 
-async function doImportBackup(file) {
-  if (!file) return;
+async function parseScriptForImport(data, code, filename) {
+  const canUseStorage = !!browser?.storage?.local?.set;
+  if (IMPORT_USE_STORAGE && canUseStorage) {
+    return parseScriptViaStorage(data, code, filename);
+  }
+  try {
+    return await parseScriptViaPort(data, code, filename);
+  } catch (err) {
+    reportDebug(`端口解析失败，尝试存储: ${err?.message || err}`);
+    if (canUseStorage) {
+      return parseScriptViaStorage(data, code, filename);
+    }
+    throw err;
+  }
+}
+
+function parseScriptViaPort(data, code, filename) {
+  return new Promise((resolve, reject) => {
+    const port = browser.runtime.connect({ name: IMPORT_PORT_NAME });
+    let done = false;
+    let ready = false;
+    let startAttempts = 0;
+    let startTimer;
+    let chunkTaskStarted = false;
+    const finish = (err, result) => {
+      if (done) return;
+      done = true;
+      clearTimeout(startTimer);
+      try { port.disconnect(); } catch (e) { /* ignore */ }
+      if (err) reject(err);
+      else resolve(result);
+    };
+    port.onMessage.addListener(msg => {
+      if (done) return;
+      if (msg?.type === 'ready') {
+        ready = true;
+        clearTimeout(startTimer);
+        if (!chunkTaskStarted) {
+          chunkTaskStarted = true;
+          sendChunks();
+        }
+        return;
+      }
+      if (msg?.ok) finish(null, msg.result);
+      else if (msg?.error) finish(new Error(msg.error));
+    });
+    port.onDisconnect.addListener(() => {
+      if (!done) finish(new Error(`导入端口断开: ${filename}`));
+    });
+    const sendStart = () => {
+      if (done || ready) return;
+      startAttempts += 1;
+      try {
+        port.postMessage({ type: 'start', data: { ...data, code: undefined } });
+      } catch (e) {
+        finish(e);
+        return;
+      }
+      if (startAttempts < IMPORT_PORT_READY_RETRY) {
+        startTimer = setTimeout(sendStart, IMPORT_PORT_READY_TIMEOUT);
+      } else {
+        startTimer = setTimeout(() => {
+          if (!ready && !done) finish(new Error(`导入端口未就绪: ${filename}`));
+        }, IMPORT_PORT_READY_TIMEOUT);
+      }
+    };
+    const sendChunks = async () => {
+      try {
+        const codeLen = code.length;
+        for (let i = 0; i < codeLen; i += IMPORT_CHUNK_SIZE) {
+          port.postMessage({ type: 'chunk', chunk: code.slice(i, i + IMPORT_CHUNK_SIZE) });
+          if (i && i % (IMPORT_CHUNK_SIZE * 8) === 0) {
+            await makePause(0);
+          }
+        }
+        port.postMessage({ type: 'end' });
+      } catch (err) {
+        finish(err);
+      }
+    };
+    sendStart();
+  });
+}
+
+async function parseScriptViaStorage(data, code, filename) {
+  const codeKey = `${IMPORT_STORAGE_PREFIX}${getUniqId()}`;
+  reportDebug(`写入临时脚本: ${filename}`);
+  try {
+    await withTimeout(
+      browser.storage.local.set({ [codeKey]: code }),
+      20000,
+      `写入脚本超时: ${filename}`
+    );
+    return await withTimeout(
+      sendCmdDirectly(
+        'ParseScriptFromStorage',
+        { ...data, codeKey },
+        { retry: true, bgTimeout: 1200 }
+      ),
+      120000,
+      `ParseScript 超时: ${filename}`
+    );
+  } finally {
+    browser.storage.local.remove(codeKey).catch(() => {});
+  }
+}
+
+async function doImportBackup(buf, zipName) {
   reports.length = 0;
   reportDebug('开始导入');
+  let vm;
+  let files;
+  let total = 0;
   const importScriptData = options.get('importScriptData');
-  let zip;
+  const optionsNames = [];
+  const scriptTimes = {};
+  const storageNames = [];
+  const kUserJs = '.user.js';
+  const kOptionsJson = '.options.json';
+  const kStorageJson = '.storage.json';
   try {
-    zip = await withTimeout(loadZipLibrary(), 8000, '加载ZIP库超时');
-    if (!zip?.ZipReader || !zip?.BlobReader) {
-      throw new Error('ZIP库未就绪');
-    }
-    reportDebug('ZIP库已就绪');
-  } catch (e) {
-    report(e, file.name, 'critical');
+    files = unzipSync(new Uint8Array(buf), {
+      filter: ({ name: filename, time, originalSize }) => originalSize < 100e6 && (
+        filename.toLowerCase() === vmZipEntryName && (vm = filename) ||
+        filename.endsWith(kOptionsJson) && optionsNames.push(filename) ||
+        filename.endsWith(kStorageJson) && storageNames.push(filename) ||
+        filename.endsWith(kUserJs) && (scriptTimes[filename] = time, ++total)
+      ),
+    });
+  } catch (err) {
+    report(err.message || err);
     return;
   }
-  let reader;
-  let entries;
-  const zipProgressIndex = (() => {
-    reportDebug('读取ZIP条目...');
-    return reports.length - 1;
-  })();
-  const updateZipProgress = (progress, total, label = '读取ZIP') => {
-    const row = reports[zipProgressIndex];
-    if (!row) return;
-    if (Number.isFinite(total) && total > 0) {
-      row.text = `${label}: ${progress} / ${total}`;
-    } else {
-      row.text = `${label}: ${progress}`;
-    }
-  };
-  const readEntriesWithReader = async (makeReader, label) => {
-    try {
-      reader = makeReader();
-    } catch (e) {
-      report(e, file.name, 'critical');
-      return null;
-    }
-    try {
-      updateZipProgress(0, 0, label);
-      return await withTimeout(reader.getEntries({
-        onprogress: (progress, total) => updateZipProgress(progress, total, label),
-      }), 20000, '读取ZIP超时');
-    } catch (e) {
-      report(e, file.name, 'critical');
-      await reader.close().catch(() => {});
-      return null;
-    }
-  };
-  entries = await readEntriesWithReader(
-    () => new zip.ZipReader(new zip.BlobReader(file), { useWebWorkers: false }),
-    '读取ZIP(Blob)'
-  );
-  if (!entries) {
-    reportDebug('Blob读取失败，尝试Uint8Array读取');
-    let buf;
-    try {
-      buf = await withTimeout(file.arrayBuffer(), 20000, '读取文件超时');
-    } catch (e) {
-      report(e, file.name, 'critical');
-      return;
-    }
-    entries = await readEntriesWithReader(
-      () => new zip.ZipReader(new zip.Uint8ArrayReader(new Uint8Array(buf)), { useWebWorkers: false }),
-      '读取ZIP(Uint8Array)'
-    );
-  }
-  if (!entries) return;
-  reportDebug('ZIP条目读取完成');
-  if (reports.some(item => item.type === 'critical')) return;
-  reportDebug(`读取条目数: ${entries.length}`);
-  report('', file.name, 'info');
+  report('', zipName, 'info');
   report('', '', 'info'); // deps
   const uriMap = {};
-  const total = entries.reduce((n, entry) => n + entry.filename?.endsWith('.user.js'), 0);
-  const vmEntry = entries.find(entry => entry.filename?.toLowerCase() === 'violentmonkey');
-  const vm = vmEntry && await readContents(vmEntry) || {};
-  const importSettings = options.get('importSettings') && vm.settings;
-  const scripts = vm.scripts || {};
-  const values = vm.values || {};
+  let scripts = {};
+  let values = {};
   let now;
   let depsDone = 0;
   let depsTotal = 0;
@@ -344,22 +398,38 @@ async function doImportBackup(file) {
     if (!ready) undoPort = null;
     reportDebug(`undo端口: ${ready ? '就绪' : '超时'}`);
   }
+  for (const filename in files) {
+    try {
+      const text = strFromU8(files[filename]);
+      files[filename] = filename.endsWith(kUserJs)
+        ? text
+        : JSON.parse(text, filename);
+    } catch (e) {
+      report(e, filename, null);
+    }
+  }
+  if (vm && (vm = files[vm])) {
+    scripts = vm.scripts || scripts;
+    values = vm.values || values;
+    if (options.get('importSettings') && isPlainObject(vm.settings)) {
+      delete vm.settings.sync;
+      await withTimeout(
+        sendCmdDirectly('SetOptions', vm.settings, { retry: true, bgTimeout: 1200 }),
+        15000,
+        'SetOptions 超时'
+      );
+    }
+  }
   reportDebug('处理 .options.json');
-  await processAll(readScriptOptions, '.options.json');
+  optionsNames.forEach(readScriptOptions);
   reportDebug('处理 .user.js');
-  await processAll(readScript, '.user.js');
+  for (const filename in scriptTimes) {
+    await readScript(filename, scriptTimes[filename]);
+  }
   if (importScriptData) {
     reportDebug('处理 .storage.json');
-    await processAll(readScriptStorage, '.storage.json');
+    storageNames.forEach(readScriptStorage);
     await sendValueStoresBatched(values);
-  }
-  if (isPlainObject(importSettings)) {
-    delete importSettings.sync;
-    await withTimeout(
-      sendCmdDirectly('SetOptions', importSettings, { retry: true, bgTimeout: 1200 }),
-      15000,
-      'SetOptions 超时'
-    );
   }
   try {
     await withTimeout(
@@ -377,42 +447,17 @@ async function doImportBackup(file) {
     );
   }
   await refreshAfterImport();
-  await reader.close();
   reportProgress();
   if (now && undoPort) undoTime.value = now;
   reportDebug('导入完成');
 
-  function parseJson(text, entry) {
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      report(e, entry.filename, null);
-    }
-  }
-  async function processAll(transform, suffix) {
-    for (const entry of entries) {
-      const { filename } = entry;
-      if (filename?.endsWith(suffix)) {
-        const contents = await readContents(entry);
-        if (contents) {
-          await transform(entry, contents, filename.slice(0, -suffix.length));
-        }
-      }
-    }
-  }
-  async function readContents(entry) {
-    const text = await withTimeout(
-      entry.getData(new zip.TextWriter()),
-      15000,
-      `读取条目超时: ${entry.filename}`
-    );
-    return entry.filename.endsWith('.js') ? text : parseJson(text, entry);
-  }
-  async function readScript(entry, code, name) {
-    const { filename } = entry;
+  async function readScript(filename, time) {
+    let decodedTime;
+    const name = filename.slice(0, -kUserJs.length);
+    const code = files[filename];
     const more = scripts[name];
     const data = {
-      code,
+      code: files[filename],
       portId: depsPortId,
       ...more && {
         custom: more.custom,
@@ -425,13 +470,16 @@ async function doImportBackup(file) {
         props: {
           lastModified: more.lastModified
             || more.props?.lastModified // Import data from Tampermonkey
-            || +entry.lastModDate,
+            || (decodedTime = +zipTimeToDate(time) || now),
           lastUpdated: more.lastUpdated
             || more.props?.lastUpdated // Import data from Tampermonkey
-            || +entry.lastModDate,
+            || decodedTime
+            || +zipTimeToDate(time)
+            || now,
         },
       },
     };
+    files[filename] = '';
     try {
       reportDebug(`ParseScript: ${filename}`);
       const result = await withTimeout(
@@ -446,117 +494,16 @@ async function doImportBackup(file) {
     }
   }
 
-  async function parseScriptForImport(data, code, filename) {
-    const canUseStorage = !!browser?.storage?.local?.set;
-    if (IMPORT_USE_STORAGE && canUseStorage) {
-      return parseScriptViaStorage(data, code, filename);
-    }
-    try {
-      return await parseScriptViaPort(data, code, filename);
-    } catch (err) {
-      reportDebug(`端口解析失败，尝试存储: ${err?.message || err}`);
-      if (canUseStorage) {
-        return parseScriptViaStorage(data, code, filename);
-      }
-      throw err;
-    }
-  }
-
-  function parseScriptViaPort(data, code, filename) {
-    return new Promise((resolve, reject) => {
-      const port = browser.runtime.connect({ name: IMPORT_PORT_NAME });
-      let done = false;
-      let ready = false;
-      let startAttempts = 0;
-      let startTimer;
-      let chunkTaskStarted = false;
-      const finish = (err, result) => {
-        if (done) return;
-        done = true;
-        clearTimeout(startTimer);
-        try { port.disconnect(); } catch (e) {}
-        if (err) reject(err);
-        else resolve(result);
-      };
-      port.onMessage.addListener(msg => {
-        if (done) return;
-        if (msg?.type === 'ready') {
-          ready = true;
-          clearTimeout(startTimer);
-          if (!chunkTaskStarted) {
-            chunkTaskStarted = true;
-            sendChunks();
-          }
-          return;
-        }
-        if (msg?.ok) finish(null, msg.result);
-        else if (msg?.error) finish(new Error(msg.error));
-      });
-      port.onDisconnect.addListener(() => {
-        if (!done) finish(new Error(`导入端口断开: ${filename}`));
-      });
-      const sendStart = () => {
-        if (done || ready) return;
-        startAttempts += 1;
-        try {
-          port.postMessage({ type: 'start', data: { ...data, code: undefined } });
-        } catch (e) {
-          finish(e);
-          return;
-        }
-        if (startAttempts < IMPORT_PORT_READY_RETRY) {
-          startTimer = setTimeout(sendStart, IMPORT_PORT_READY_TIMEOUT);
-        } else {
-          startTimer = setTimeout(() => {
-            if (!ready && !done) finish(new Error(`导入端口未就绪: ${filename}`));
-          }, IMPORT_PORT_READY_TIMEOUT);
-        }
-      };
-      const sendChunks = async () => {
-        try {
-          const total = code.length;
-          for (let i = 0; i < total; i += IMPORT_CHUNK_SIZE) {
-            port.postMessage({ type: 'chunk', chunk: code.slice(i, i + IMPORT_CHUNK_SIZE) });
-            if (i && i % (IMPORT_CHUNK_SIZE * 8) === 0) {
-              await makePause(0);
-            }
-          }
-          port.postMessage({ type: 'end' });
-        } catch (err) {
-          finish(err);
-        }
-      };
-      sendStart();
-    });
-  }
-
-  async function parseScriptViaStorage(data, code, filename) {
-    const codeKey = `${IMPORT_STORAGE_PREFIX}${getUniqId()}`;
-    reportDebug(`写入临时脚本: ${filename}`);
-    try {
-      await withTimeout(
-        browser.storage.local.set({ [codeKey]: code }),
-        20000,
-        `写入脚本超时: ${filename}`
-      );
-      return await withTimeout(
-        sendCmdDirectly(
-          'ParseScriptFromStorage',
-          { ...data, codeKey },
-          { retry: true, bgTimeout: 1200 }
-        ),
-        120000,
-        `ParseScript 超时: ${filename}`
-      );
-    } finally {
-      browser.storage.local.remove(codeKey).catch(() => {});
-    }
-  }
-  async function readScriptOptions(entry, json, name) {
-    const { meta, settings = {}, options: opts } = json;
+  function readScriptOptions(filename) {
+    const name = filename.slice(0, -kOptionsJson.length);
+    const { meta, settings = {}, options: opts } = files[filename];
+    files[filename] = '';
     if (!meta || !opts) return;
     const ovr = opts.override || {};
-    reports[0].text = 'Tampermonkey';
+    const tags = opts.tags;
+    const origTags = ovr.orig_tags;
+    const hasOrigTags = !origTags?.length || tags?.length && origTags.every(t => tags.includes(t));
+    reports[0].text = TM;
     /** @type {VMScript} */
     scripts[name] = {
       config: {
@@ -565,6 +512,9 @@ async function doImportBackup(file) {
       },
       custom: {
         [kDownloadURL]: typeof meta.file_url === 'string' ? meta.file_url : undefined,
+        [kTag]: hasOrigTags && origTags ? tags.filter(t => !origTags.includes(t)) : tags,
+        [kOrigTag]: !!hasOrigTags,
+        [kComment]: ovr[kComment] || undefined,
         noframes: ovr.noframes == null ? undefined : +!!ovr.noframes,
         runAt: RUN_AT_RE.test(opts.run_at) ? opts.run_at : undefined,
         [kExclude]: toStringArray(ovr.use_excludes),
@@ -581,9 +531,10 @@ async function doImportBackup(file) {
       },
     };
   }
-  async function readScriptStorage(entry, json, name) {
-    reports[0].text = 'Tampermonkey';
-    values[uriMap[name]] = json.data;
+  function readScriptStorage(filename) {
+    const name = filename.slice(0, -kStorageJson.length);
+    reports[0].text = TM;
+    values[uriMap[name]] = files[filename].data;
   }
   function reportProgress(filename = '') {
     const count = Object.keys(uriMap).length;
@@ -594,6 +545,16 @@ async function doImportBackup(file) {
   }
   function toStringArray(data) {
     return ensureArray(data).filter(item => typeof item === 'string');
+  }
+  function zipTimeToDate(time) {
+    return new Date(
+      /*Y*/((time >> 25) & 0x7f) + 1980,
+      /*M*/(time >> 21) & 0x0f - 1,
+      /*D*/(time >> 16) & 0x1f,
+      /*h*/(time >> 11) & 0x1f,
+      /*m*/(time >> 5) & 0x3f,
+      /*s*/(time & 0x1f) * 2,
+    );
   }
 }
 
@@ -616,9 +577,9 @@ async function sendValueStoresBatched(data) {
     );
     await makePause(0);
   };
-  for (const [key, store] of entries) {
+  for (const [key, valueStore] of entries) {
     let size = 0;
-    try { size = JSON.stringify(store).length; } catch (e) {}
+    try { size = JSON.stringify(valueStore).length; } catch (e) { /* ignore */ }
     const approx = String(key).length + size + 8;
     if (batchBytes && (
       batchBytes + approx > VALUE_BATCH_BYTES
@@ -627,7 +588,7 @@ async function sendValueStoresBatched(data) {
       await flush();
       reportDebug(`写入脚本数据进度: ${sent}/${total}`);
     }
-    batch[key] = store;
+    batch[key] = valueStore;
     batchBytes += approx;
     sent += 1;
   }

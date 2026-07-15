@@ -1,8 +1,10 @@
 const { alias, extensions } = require('./scripts/common');
+const { getBrowserTargets } = require('./scripts/manifest-helper');
 
 const isTest = process.env.BABEL_ENV === 'test';
 
 module.exports = {
+  targets: getBrowserTargets(),
   presets: [
     ['@babel/preset-env', {
       ...!isTest && {
@@ -24,7 +26,6 @@ module.exports = {
       extensions,
     }],
     './scripts/babel-plugin-safe-bind.js',
-    ['@babel/plugin-transform-for-of', { assumeArray: true }],
     ['transform-modern-regexp', { useRe: true }],
   ],
 };

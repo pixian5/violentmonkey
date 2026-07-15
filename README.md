@@ -21,19 +21,25 @@ A test build is generated automatically for changes between beta releases. It ca
 
 ### Development
 
-Install [Node.js](https://nodejs.org/) and Yarn v1.x.
+Install [Node.js](https://nodejs.org/) and PNPM.
 The version of Node.js should match `"node"` key in `package.json`.
 This project is pinned to Yarn `1.22.22`.
 
 ``` sh
 # Install dependencies
-$ yarn
+$ pnpm i
 
 # Watch and compile
-$ yarn dev
+$ pnpm dev
 ```
 
 Then load the extension from 'dist/'.
+
+### Test + lint
+
+``` sh
+$ pnpm run ci
+```
 
 ### Build
 
@@ -41,10 +47,10 @@ To release a new version, we must build the assets and upload them to web stores
 
 ``` sh
 # Build for normal releases
-$ yarn build
+$ pnpm build
 
 # Build for self-hosted release that has an update_url
-$ yarn build:selfHosted
+$ pnpm build:selfHosted
 ```
 
 ### macOS Desktop Build

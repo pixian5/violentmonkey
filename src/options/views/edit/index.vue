@@ -4,13 +4,13 @@
       <nav>
         <div
           v-for="(label, navKey) in navItems" :key="navKey"
-          class="edit-nav-item" :class="{active: nav === navKey}"
+          class="edit-nav-item" :class="{ active: nav === navKey, 'with-icon': navKey === EXTERNALS }"
           @click="nav = navKey"
         >{{
           label
         }}<template v-if="navKey === EXTERNALS">
-            <a @click.stop="onUpdateDeps" class="nav-icon"><icon name="refresh"/></a>
-            <span v-text="depsProgress"/>
+            <a @click.stop="onUpdateDeps"><icon name="refresh"/></a>
+            <span v-text="depsProgress" v-if="depsProgress"/>
           </template>
         </div>
       </nav>
@@ -109,7 +109,7 @@ import {
   debounce, formatByteLength, getScriptName, getScriptUpdateUrl, i18n, isEmpty,
   nullBool2string, sendCmdDirectly, trueJoin,
 } from '@/common';
-import { ERR_BAD_PATTERN, VM_DOCS_MATCHING, VM_HOME } from '@/common/consts';
+import { ERR_BAD_PATTERN, VM_DOCS_MATCHING, VM_HOME, kOrigTag, kTag } from '@/common/consts';
 import { deepCopy, deepEqual, objectPick } from '@/common/object';
 import { externalEditorInfoUrl, focusMe, getActiveElement, showMessage } from '@/common/ui';
 import { keyboardService } from '@/common/keyboard';
@@ -118,11 +118,12 @@ import { getUnloadSentry } from '@/common/router';
 import { EXTERNAL_LINK_PROPS } from '@/common/ui';
 import {
   kDownloadURL, kExclude, kExcludeMatch, kHomepageURL, kIcon, kInclude, kMatch, kName, kOrigExclude, kOrigExcludeMatch,
-  kOrigInclude, kOrigMatch, kUpdateURL,
+  kOrigInclude, kOrigMatch, kUpdateURL, kComment,
 } from '../../utils';
 
 const EXTERNALS = 'externals';
 const CUSTOM_PROPS = {
+  [kComment]: '',
   [kName]: '',
   [kHomepageURL]: '',
   [kUpdateURL]: '',
@@ -132,7 +133,7 @@ const CUSTOM_PROPS = {
   [kOrigExclude]: true,
   [kOrigMatch]: true,
   [kOrigExcludeMatch]: true,
-  tags: '',
+  [kOrigTag]: true,
 };
 const toProp = val => val !== '' ? val : null; // `null` removes the prop from script object
 const CUSTOM_LISTS = [
@@ -140,6 +141,7 @@ const CUSTOM_LISTS = [
   kMatch,
   kExclude,
   kExcludeMatch,
+  kTag,
 ];
 const toList = text => (
   text.trim()
@@ -230,6 +232,7 @@ const hashPattern = computed(() => { // eslint-disable-line vue/return-in-comput
       )) {
         return val.length > 100 ? val.slice(0, 100) + '...' : val;
       }
+      if (key === kExcludeMatch) break; // the last key for site targets
     }
   }
 });
@@ -364,13 +367,15 @@ async function save() {
       message: '',
       bumpDate: true,
     });
-    const newId = res?.where?.id;
+    const newId = res.where.id;
+    const newScript = res.update;
     CM.markClean();
     codeDirty.value = false; // triggers onDirty which sets canSave
     canSave.value = false; // ...and set it explicitly in case codeDirty was false
     frozenNote.value = false;
     errors.value = res.errors;
-    script.value = res.update; // triggers onScript+onChange to handle the new `meta` and `props`
+    newScript.$cache = scr.$cache; // retains kStorageSize, the rest will be updated in initScript later
+    script.value = newScript; // triggers onScript+onChange to handle the new `meta` and `props`
     if (newId && !id) history.replaceState(null, scriptName.value, `${ROUTE_SCRIPTS}/${newId}`);
     fatal.value = null;
   } catch (err) {
@@ -508,6 +513,9 @@ function setupSavePosition({ id: curWndId, tabs }) {
     justify-content: space-between;
     border-bottom: var(--border);
     background: inherit;
+    a.btn-ghost {
+      padding: 0 2px;
+    }
   }
   &-name {
     font-weight: bold;
@@ -531,12 +539,20 @@ function setupSavePosition({ id: curWndId, tabs }) {
       background: var(--fill-0-5);
       box-shadow: 0 -1px 1px var(--fill-4);
     }
-    a.nav-icon {
-      vertical-align: middle;
-      padding: $navPadY $navPadX;
-      margin-right: -$navPadX;
-      &:not(:hover) {
-        color: inherit;
+    &.with-icon {
+      padding-right: 0;
+      > a {
+        padding: $navPadY;
+        margin: -$navPadY 0 -$navPadY $navPadY;
+        &:not(:hover) {
+          color: inherit;
+        }
+        svg {
+          transform: translateY(2px); /* the icon is not centered innately */
+        }
+      }
+      > span {
+        padding-right: $navPadX;
       }
     }
   }
@@ -589,8 +605,8 @@ function setupSavePosition({ id: curWndId, tabs }) {
   .readonly {
     opacity: .75; /* opacity plays well with custom editor colors */
   }
-  a.btn-ghost {
-    padding: 0 2px;
+  [data-num]::after {
+    content: ' (' attr(data-num) ')';
   }
 }
 
@@ -604,7 +620,7 @@ function setupSavePosition({ id: curWndId, tabs }) {
   min-height: calc(100vh + 1px);
 }
 
-@media (max-width: 767px) {
+html.narrow {
   .edit-hint {
     display: none;
   }

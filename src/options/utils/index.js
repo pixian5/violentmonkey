@@ -1,9 +1,12 @@
-import { reactive } from 'vue';
+import { reactive, ref } from 'vue';
 import { getScriptsTags, i18n, sendCmdDirectly } from '@/common';
+import { kTag } from '@/common/consts';
 import { route } from '@/common/router';
 
 export * from './search';
 
+export const filteredScripts = ref([]);
+export const sortedScripts = ref([]);
 export const store = reactive({
   route,
   batch: null,
@@ -20,6 +23,7 @@ export const store = reactive({
   title: null,
 });
 
+export const kComment = 'comment';
 export const kInclude = 'include';
 export const kMatch = 'match';
 export const kExclude = 'exclude';
@@ -37,6 +41,7 @@ export const kStorageSize = 'storageSize';
 export const kUpdateURL = 'updateURL';
 export const TOGGLE_ON = 'toggle-on';
 export const TOGGLE_OFF = 'toggle-off';
+export const vmZipEntryName = VIOLENTMONKEY.toLowerCase();
 
 // Same order as getSizes and sizesPrefixRe
 export const SIZE_TITLES = [
@@ -66,6 +71,26 @@ export function markRemove(script, removed) {
     id: script.props.id,
     removed,
   });
+}
+
+/**
+ * @param {UIScript[]} scripts
+ */
+export function performSearch(scripts) {
+  const rules = store.search.rules;
+  if (!rules?.length) return;
+  for (const { $cache } of scripts) {
+    let show = 0;
+    for (const { re, negative, scope } of rules) {
+      const res = scope === kTag ? $cache[kTag].some(re.test, re) && 3 :
+        (!scope || scope === 'name') && ($cache.mark = re.exec($cache.name)) && 4 ||
+        (!scope || scope === 'desc') && re.test($cache.desc) && 2 ||
+        (!scope || scope === 'code') && re.test($cache.code) && 1;
+      if (negative ? res : !res) break;
+      if (res > show) show = res;
+    }
+    $cache.show = show;
+  }
 }
 
 export async function runInBatch(fn, ...args) {

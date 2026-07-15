@@ -1,8 +1,8 @@
-import { ensureArray, ignoreChromeErrors, initHooks, isEmpty, sendCmd } from '@/common';
+import { ensureArray, ignoreChromeErrors, initHooks, isEmpty, keepAlive } from '@/common';
 import initCache from '@/common/cache';
 import { INFERRED, WATCH_STORAGE } from '@/common/consts';
 import { deepCopy, deepCopyDiff, deepSize, forEachEntry } from '@/common/object';
-import { dbKeys, scriptSizes, sizesPrefixRe } from './db';
+import { dbKeys, initializeDatabase, scriptSizes, sizesPrefixRe } from './db';
 import { scriptSiteVisited, updateScriptMap } from './script';
 import storage, { S_MOD_PRE, S_SCRIPT_PRE, S_VALUE, S_VALUE_PRE } from './storage';
 import { clearValueOpener } from './values';
@@ -131,7 +131,7 @@ export const cachedStorageApi = storage.api = {
 setInterval(() => {
   dbKeys.forEach((val, key) => !val && dbKeys.delete(key));
 }, TTL_TINY);
-window[WATCH_STORAGE] = fn => {
+if (!__.MV3) global[WATCH_STORAGE] = fn => {
   const id = performance.now();
   watchers[id] = fn;
   return id;
@@ -141,11 +141,13 @@ browser.runtime.onConnect.addListener(port => {
   if (!port.name.startsWith(WATCH_STORAGE)) return;
   const { id, cfg, tabId } = JSON.parse(port.name.slice(WATCH_STORAGE.length));
   const fn = id ? watchers[id] : port.postMessage.bind(port);
+  const resolve = __.MV3 && keepAlive();
   watchStorage(fn, cfg);
   port.onDisconnect.addListener(() => {
     clearValueOpener(tabId);
     watchStorage(fn, cfg, false);
     delete watchers[id];
+    if (__.MV3) resolve();
   });
 });
 
@@ -226,21 +228,23 @@ function notifyWatchers(toFlush, toRemove) {
 async function undoImport(port) {
   let drop;
   let old;
+  const resolve = __.MV3 && keepAlive();
   port.onDisconnect.addListener(() => {
     ignoreChromeErrors();
     drop = true;
+    if (__.MV3) resolve();
   });
   port.onMessage.addListener(async () => {
     valuesToFlush = {};
     const cur = await cachedStorageApi.get();
     const toRemove = Object.keys(cur).filter(k => !(k in old));
-    const delay = Math.max(50, Math.min(500, performance.getEntries()[0]?.duration || 200));
     undoing = true;
     if (toRemove.length) await cachedStorageApi.remove(toRemove);
     await cachedStorageApi.set(old);
     port.postMessage(true);
-    await sendCmd('Reload', delay);
-    location.reload();
+    clearStorageCache();
+    await initializeDatabase();
+    undoing = false;
   });
   old = await api.get(null);
   if (!drop) port.postMessage(true);

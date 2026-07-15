@@ -3,12 +3,17 @@ import { initHooks, sendCmdDirectly } from '.';
 import { forEachEntry, objectGet, objectSet } from './object';
 
 let options = {};
-const { hook, fire } = initHooks();
-const ready = sendCmdDirectly('GetAllOptions', null, { retry: true })
-.then((data) => {
-  options = data;
-  if (data) fire(data);
-});
+const { hook, fire } = initHooks(() => options);
+const ready = (async () => {
+  if (__.MV3 && (
+    options = BGDATA.opts
+  )) {
+    await 0; // let the app attach its hooks
+  } else {
+    options = await sendCmdDirectly('GetAllOptions', null, { retry: true });
+  }
+  if (options) fire(options);
+})();
 
 export default {
   ready,

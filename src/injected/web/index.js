@@ -29,7 +29,7 @@ export default function initialize(invokeHost, console) {
       },
     });
     /* Can't use a detached `console` in Chrome 109+ due to https://crrev.com/1063194 */
-    if (!IS_FIREFOX) {
+    if (__.MV3 || !IS_FIREFOX) {
       for (const m of CONSOLE_METHODS) {
         logging[m] = (...args) => bridge.post('Log', [m, args]);
       }
@@ -47,7 +47,7 @@ export default function initialize(invokeHost, console) {
     global.browser = undefined;
     logging = console; // eslint-disable-line no-global-assign
     return (cmd, data, realm, node) => {
-      if (process.env.DEBUG) console.info('[bridge.guest.content] received', { cmd, data, node });
+      if (__.DEBUG) console.info('[bridge.guest.content] received', { cmd, data, node });
       bridge.onHandle({ cmd, data, node });
     };
   }
@@ -112,13 +112,13 @@ addHandlers({
       }
     }
     if (!PAGE_MODE_HANDSHAKE) toRunNow::forEach(onCodeSet);
-    else if (IS_FIREFOX) bridge.post('InjectList', items[0][RUN_AT]);
+    else if (!__.MV3 && IS_FIREFOX) bridge.post('InjectList', items[0][RUN_AT]);
   },
   Expose(allowGetScriptVer) {
     const key = 'external';
     const obj = window[key];
     (isObject(obj) ? obj : (window[key] = {}))[VIOLENTMONKEY] = {
-      version: process.env.VM_VER,
+      version: __.VM_VER,
       isInstalled: (name, namespace) => (
         allowGetScriptVer
           ? bridge.promise('GetScriptVer', { meta: { name, namespace } })
@@ -135,7 +135,7 @@ function onCodeSet(fn) {
   if (grantless) grantlessUsage[item.id] = grantless;
   // Deleting now to prevent interception via DOMNodeRemoved on el::remove()
   delete window[item.key.win];
-  if (process.env.DEBUG) {
+  if (__.DEBUG) {
     log('info', [bridge.mode], item.displayName);
   }
   if (el) {

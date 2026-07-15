@@ -1,6 +1,7 @@
 // SAFETY WARNING! Exports used by `injected` must make ::safe() calls and use __proto__:null
 
-import { NO_CACHE, U8_fromBase64 } from '@/common/consts';
+import { BLOB_LIFE, NO_CACHE, U8_fromBase64 } from '@/common/consts';
+import { keepAlive, makePause } from '.';
 
 export const i18n = memoize((name, args) => chrome.i18n.getMessage(name, args) || name);
 const HAS_BASE64_RE = /(^|;)\s*base64\s*(;|$)/;
@@ -15,7 +16,7 @@ export function memoize(func) {
       ? res
       : (cacheMap[key] = safeApply(func, this, args));
   }
-  return process.env.DEV
+  return __.DEV
     ? Object.defineProperty(memoized, 'name', { value: func.name + ':memoized' })
     : memoized;
 }
@@ -111,14 +112,7 @@ export function blob2base64(blob, offset = 0, length = 1e99) {
   if (U8_fromBase64) {
     return blob.arrayBuffer().then(buf => new Uint8Array(buf).toBase64());
   }
-  return new Promise(resolve => {
-    const reader = new FileReader();
-    reader.readAsDataURL(blob);
-    reader.onload = () => {
-      const res = reader.result;
-      resolve(res.slice(res.indexOf(',') + 1));
-    };
-  });
+  return readBlob(blob).then(res => res.slice(res.indexOf(',') + 1));
 }
 
 export function dataUri2text(url) {
@@ -339,7 +333,7 @@ export function tryUrl(str, base) {
  */
 export async function request(url, options = {}) {
   // fetch supports file:// since Chrome 99 but we use XHR for consistency
-  if (url.startsWith('file:')) return requestLocalFile(url, options);
+  if (!__.MV3 && url.startsWith('file:')) return requestLocalFile(url, options);
   const { body, headers, [kResponseType]: responseType } = options;
   const isBodyObj = body && body::({}).toString() === '[object Object]';
   const [, scheme, auth, hostname, urlTail] = url.match(/^([-\w]+:\/\/)([^@/]*@)?([^/]*)(.*)|$/);
@@ -357,6 +351,7 @@ export async function request(url, options = {}) {
         accept && { accept })
       : headers,
   });
+  const keeper = __.MV3 && keepAlive();
   let status = -1;
   let result = { url };
   try {
@@ -375,6 +370,7 @@ export async function request(url, options = {}) {
     result = Object.assign(err, result);
     result.message += (status > 0 ? ` (HTTP ${status})` : ' (could not connect)') + '\n' + url;
   }
+  if (__.MV3) keeper();
   result.status = status;
   if (status < 0 || status > 300) throw result;
   return result;
@@ -402,4 +398,25 @@ export function normalizeTag(tag) {
 
 export function escapeStringForRegExp(str) {
   return str.replace(/[\\.?+[\]{}()|^$]/g, '\\$&');
+}
+
+export function leaseBlobUrl(blob) {
+  const url = URL.createObjectURL(blob);
+  makePause(BLOB_LIFE, url).then(URL.revokeObjectURL);
+  return url;
+}
+
+/**
+ * @param {Blob} blob
+ * @param {boolean} [asBuffer]
+ * @return {Promise<string|ArrayBuffer>}
+ */
+export function readBlob(blob, asBuffer) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    if (asBuffer) reader.readAsArrayBuffer(blob);
+    else reader.readAsDataURL(blob);
+  });
 }
