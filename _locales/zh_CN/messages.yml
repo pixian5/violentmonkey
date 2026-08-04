@@ -251,6 +251,9 @@ fileInstallBlocked:
     有几种方法可以在本地文件中安装或跟踪编辑： <1> 将文件拖放到打开的暴力猴页面或弹出窗口中，包括此页面。 <2>为此文件安装本地 HTTP
     服务器并通过 http://localhost 打开它。 <3> 在 chrome://extensions 页面中为暴力猴启用“允许访问文件
     URL”。但这是危险的，因为任何用户脚本都可以读取任何本地文件。
+fileInstallBlockedFF:
+  description: Text in the installer when a local file is dropped into Firefox window.
+  message: ''
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: 字母顺序
@@ -303,7 +306,7 @@ headerRecycleBin:
   message: 回收站
 helpForLocalFile:
   description: Label of the checkbox.
-  message: 显示拖放本地脚本的详细说明
+  message: ''
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: 对 $1 匹配的脚本
@@ -442,20 +445,43 @@ labelExportScriptData:
 labelExposeStatus:
   description: Option in advanced settings.
   message: 在用户脚本收录站点上暴露已安装的版本信息：$1
-labelFastFirefoxInject:
+labelFastInject:
   description: (`$1` will be shown as `page`) Option in Advanced settings.
-  message: 在 Firefox 中切换 $1 模式
-labelFastFirefoxInjectHint:
+  message: 中切换 $1 模式
+labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
-    从 Firefox 59 开始，可以切换到此种比默认方案更快的 <document-start> 注入方式。和“同步 page
+    可以切换到此种比默认方案更快的 <document-start> 注入方式。和“同步 page
     模式”类似，它也会增加内存消耗，所以如果在不开启此功能的情况下你的脚本依然正常运行，则可以考虑禁用。
 labelFeedback:
   description: Label of link to feedback page.
   message: 反馈
+labelFirefoxPatchCsp:
+  description: Option in Advanced settings.
+  message: ''
+labelFirefoxPatchCspHint:
+  description: >-
+    (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
+    in Advanced settings.
+  message: ''
+labelFirefoxPatchCspPopup:
+  description: >-
+    ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
+    in the popup's extras menu.
+  message: ''
 labelGeneral:
   description: Label for general settings.
   message: 通用
+  touched: false
+labelGmDownloadViaApi:
+  description: Option in Advanced settings to use the browser download API for GM_download.
+  message: ''
+labelGmDownloadViaApiHint:
+  description: Tooltip for the browser download option in Advanced settings.
+  message: ''
+labelGrantPermission:
+  description: Button to request the API permission.
+  message: ''
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: 帮助翻译

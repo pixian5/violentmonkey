@@ -61,6 +61,9 @@ buttonInstallOptions:
 buttonNew:
   description: Button to create a new script.
   message: New
+buttonNewFromFile:
+  description: Button to create a new script from a local file.
+  message: New from file
 buttonOK:
   description: OK button on dialog.
   message: OK
@@ -266,6 +269,11 @@ fileInstallBlocked:
     http://localhost. <3> Enable "Allow access to file URLs" in details for
     Violentmonkey in chrome://extensions page. This is dangerous because any
     userscript may read any local file.
+fileInstallBlockedFF:
+  description: Text in the installer when a local file is dropped into Firefox window.
+  message: >-
+    Open about:addons, click "Violentmonkey", click "Permissions and data",
+    enable "Access local files on your computer".
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: alphabetical
@@ -320,7 +328,7 @@ headerRecycleBin:
   message: Recycle Bin
 helpForLocalFile:
   description: Label of the checkbox.
-  message: Show the instruction for drag'n'dropped local scripts
+  message: Show help when a local script can't be installed
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: for $1 matching scripts
@@ -462,22 +470,50 @@ labelExportScriptData:
 labelExposeStatus:
   description: Option in advanced settings.
   message: 'Expose installed version on userscript catalog sites: $1'
-labelFastFirefoxInject:
+labelFastInject:
   description: (`$1` will be shown as `page`) Option in Advanced settings.
-  message: Alternative $1 mode in Firefox
-labelFastFirefoxInjectHint:
+  message: Alternative $1 mode
+labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
-    An alternative injection method for <document-start> scripts since Firefox
-    59, faster than the default mode. Similarly to "Synchronous page mode" it
-    also increases memory consumption, so you may want to disable it if your
-    scripts work correctly without this option.
+    An alternative injection method for <document-start> scripts, faster than
+    the default mode. Similarly to "Synchronous page mode" it also increases
+    memory consumption, so you may want to disable it if your scripts work
+    correctly without this option.
 labelFeedback:
   description: Label of link to feedback page.
   message: Feedback
+labelFirefoxPatchCsp:
+  description: Option in Advanced settings.
+  message: Bypass CSP in Firefox
+labelFirefoxPatchCspHint:
+  description: >-
+    (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
+    in Advanced settings.
+  message: >-
+    Adds a random value to the CSP of webpages that only Violentmonkey can use
+    to run scripts in the $1 injection mode, otherwise scripts have to be edited
+    to use $2.
+labelFirefoxPatchCspPopup:
+  description: >-
+    ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
+    in the popup's extras menu.
+  message: Isolated $1 mode may limit functionality, see "$2" in the options.
 labelGeneral:
   description: Label for general settings.
   message: General
+  touched: false
+labelGmDownloadViaApi:
+  description: Option in Advanced settings to use the browser download API for GM_download.
+  message: Use browser download API
+labelGmDownloadViaApiHint:
+  description: Tooltip for the browser download option in Advanced settings.
+  message: >-
+    Allows scripts to save files into subfolders inside your downloads directory
+    and shows download progress in the browser's download bar.
+labelGrantPermission:
+  description: Button to request the API permission.
+  message: Grant permission
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: Help with translation

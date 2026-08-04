@@ -1,5 +1,5 @@
 <template>
-  <div class="export">
+  <div class="export flex-1">
     <div class="flex flex-wrap center-items mr-1c">
       <button v-text="buttonExportTxt" @click="handleExportTxt" :disabled="exporting"/>
       <br>

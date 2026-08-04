@@ -60,6 +60,9 @@ export function setMenus(menus, { tab, [kFrameId]: frameId, [kTop]: isTop }, res
   const tabId = tab.id;
   const routes = tabRoutes[tabId] ??= {};
   const byTab = tabData[tabId] ??= {};
+  if (typeof menus === 'string') {
+    menus = JSON.parse(menus);
+  }
   if (isEmpty(menus)) {
     if (reset && isTop) {
       delete tabData[tabId];
@@ -150,7 +153,7 @@ if (contextMenus) {
   hookOptionsInit(({ [kPageMenuCommands]: state }, firstRun) => {
     if (state != null && state !== !!tabData) {
       setEnabled(state);
-      if (!firstRun) forEachTab(tab => sendTabCmd(tab.id, kUseMenu, state));
+      if (!firstRun) forEachTab(sendTabCmd, kUseMenu, state);
     }
   });
 }

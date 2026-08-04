@@ -1,10 +1,9 @@
-import bridge, { addHandlers, displayNames } from './bridge';
+import * as bridge from './bridge';
 import { UPLOAD } from '../util';
 
 /** @type {Object<string,GMReq.Web>} */
 const idMap = createNullObj();
 const kContentTextHtml = 'text/html';
-const kResponse = 'response';
 const kResponseXML = 'responseXML';
 const kDocument = 'document';
 const kRaw = 'raw';
@@ -25,10 +24,12 @@ const OPTS_TO_KEEP = [
   kResponseType,
 ];
 const OPTS_TO_PASS = [
+  'conflictAction',
   'headers',
   'method',
   'overrideMimeType',
   'password',
+  'saveAs',
   'timeout',
   'user',
 ];
@@ -50,7 +51,7 @@ const XHR_TYPES = {
   '': 0,
 };
 
-addHandlers({
+bridge.addHandlers({
   /** @param {GMReq.Message.BG} msg */
   HttpRequested(msg) {
     const req = idMap[msg.id];
@@ -65,8 +66,8 @@ addHandlers({
     }
     if (hasOwnProperty(msg, ERROR)) {
       msg = msg[ERROR];
-      msg = new SafeDOMException(msg[0], msg[1]);
-      if (cb) cb(msg); else log(ERROR, displayNames[req.scriptId], msg);
+      msg = new SafeError(msg[0], msg[1]);
+      if (cb) cb(msg); else log(ERROR, [bridge.displayNames[req.scriptId]], msg);
       return;
     }
     if (!cb) {
@@ -219,11 +220,15 @@ export function onRequestCreate(opts, context, fileName) {
       }
     }
   }
-  if (context.async) res = new SafePromise((resolve, reject) => {
+  if (context.async) {
+    const { resolve, reject } = res = SafePromiseWithResolvers();
     const { [LOAD]: onload, [ERROR]: onerror } = cb[0];
     cb[0][LOAD] = onload ? v => { resolve(v); onload(v); } : (events[0][LOAD] = true, resolve);
     cb[0][ERROR] = onerror ? v => { reject(v); onerror(v); } : (events[0][ERROR] = true, reject);
-  });
+    res = res.promise;
+  } else {
+    res = {};
+  }
   idMap[id] = req;
   data = data == null && []
     // `binary` is for TM/GM-compatibility + non-objects = must use a string `data`
@@ -246,8 +251,6 @@ export function onRequestCreate(opts, context, fileName) {
     [kXhrType]: req[kXhrType] = XHR_TYPES[type] ? type : '',
     events,
   }, opts, OPTS_TO_PASS), null, null, /*cbAsync=*/true);
-  if (!res) res = {};
-  else if (!__.MV3 && IS_FIREFOX) setPrototypeOf(res, SafePromiseConstructor);
   setOwnProp(res, 'abort', () => bridge.post('AbortRequest', id));
   return res;
 }

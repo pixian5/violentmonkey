@@ -40,7 +40,7 @@ async function handleAddon() {
             : join(process.env.ASSETS_DIR, process.env.ASSET_ZIP),
           sourceFile: join(process.env.TEMP_DIR, process.env.SOURCE_ZIP),
           approvalNotes: `\
-corepack enable pnpm && pnpm i && pnpm run ci && pnpm build
+corepack enable pnpm && pnpm ci && pnpm run ci && pnpm build
 `,
           releaseNotes: {
             'en-US': `\
@@ -61,7 +61,7 @@ ${releaseUrl}
   await mkdir(process.env.ASSETS_DIR, { recursive: true });
   await rename(tempFile, xpiFile);
 
-  const updates = await buildUpdatesList(version, url);
+  const updates = buildUpdatesList(version, url);
   await writeFile(
     join(process.env.TEMP_DIR, 'updates/updates.json'),
     JSON.stringify(updates, null, 2),
@@ -75,7 +75,10 @@ async function main() {
     await handleAddon();
   } catch (err) {
     if (err?.message === 'Polling skipped') {
-      error = beta ? new Error('Pending review') : undefined;
+      if (beta) {
+        error = new Error('Pending review');
+        error.stack = '';
+      }
     } else {
       error = err;
     }

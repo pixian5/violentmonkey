@@ -1,10 +1,13 @@
-import { onClientMessage } from '@/common/sw-messaging';
+import { registerInjector } from '@/common/browser-scripts-api';
+import { TLDJS } from '@/common/consts';
+import { onClientMessage } from '@/common/messaging-sw';
+import { autoSync } from './sync/sync-engine';
 import { checkRemove, getData } from './utils/db';
-import { init } from './utils/init';
+import { addOwnCommands, init } from './utils/init';
 import { removeNotification } from './utils/notifications';
 import { getAllOptions } from './utils/options';
 import { initPopup } from './utils/popup-tracker';
-import { kAlarmRemove, kAlarmUpdate, kNotifications } from './utils/session-data';
+import { kAlarmRemove, kAlarmSync, kAlarmUpdate, kNotifications } from './utils/session-data';
 import { resolveVirtualUrl } from './utils/tab-redirector';
 import { autoUpdate } from './utils/update';
 import { handleCommandMessage } from '.';
@@ -38,15 +41,16 @@ global.onfetch = async evt => {
 };
 
 global.oninstall = evt => {
-  evt.addRoutes({
+  importScripts(TLDJS);
+  // Not implemented in some browsers?
+  evt.addRoutes?.({
     condition: { urlPattern: `${GET_DATA_URL}*` },
     source: 'fetch-event',
   });
-  evt.addRoutes({
+  evt.addRoutes?.({
     condition: { not: { urlPattern: `${extensionRoot}*.user.js`, requestDestination: 'document' } },
     source: 'network',
   });
-  importScripts('tld.js');
 };
 
 global.onmessage = onClientMessage.bind(null, handleCommandMessage);
@@ -55,6 +59,8 @@ chrome.alarms.onAlarm.addListener(async ({ name }) => {
   if (init) await init;
   if (name === kAlarmRemove) {
     checkRemove();
+  } else if (name === kAlarmSync) {
+    autoSync();
   } else if (name === kAlarmUpdate) {
     autoUpdate();
   } else if (name.startsWith(kNotifications)) {
@@ -62,3 +68,6 @@ chrome.alarms.onAlarm.addListener(async ({ name }) => {
   }
 });
 
+addOwnCommands({
+  GetInjectorError: () => registerInjector(), // ensuring no parameters are passed
+});

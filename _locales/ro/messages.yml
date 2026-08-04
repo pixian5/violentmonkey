@@ -204,7 +204,7 @@ editHelpDocumentation:
   description: Label in the editor help tab for the documentation link.
   message: >-
     Documentație cu privire la blockurile metadatelor usescripturilor și
-    API-urile <code>GM</code>: 
+    API-urile <code>GM</code>:
 editHelpKeyboard:
   description: Label in the editor help tab for the keyboard shortcuts.
   message: Comenzi rapide de la tastatură
@@ -278,6 +278,9 @@ fileInstallBlocked:
     <3> Activează „Permite accesul la adresele URL de fișiere” în detaliile
     pentru Violentmonkey din pagina chrome://extensions. Acest lucru este
     periculos, deoarece orice userscript poate citi orice fișier local.
+fileInstallBlockedFF:
+  description: Text in the installer when a local file is dropped into Firefox window.
+  message: ''
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: alfabetică
@@ -332,7 +335,7 @@ headerRecycleBin:
   message: Coș de reciclare
 helpForLocalFile:
   description: Label of the checkbox.
-  message: Afișează instrucțiunile pentru scripturile locale trase și plasate
+  message: ''
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: pentru $1 scripturi coincidente
@@ -477,23 +480,45 @@ labelExportScriptData:
 labelExposeStatus:
   description: Option in advanced settings.
   message: 'Expune versiunea instalată pe site-urile de catalog ale userscripturilor: $1'
-labelFastFirefoxInject:
+labelFastInject:
   description: (`$1` will be shown as `page`) Option in Advanced settings.
-  message: Mod $1 alternativ în Firefox
-labelFastFirefoxInjectHint:
+  message: Mod $1 alternativ
+labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
-    O metodă alternativă de injectare pentru scripturile<document-start>
-    începând cu Firefox 59, mai rapidă decât modul implicit. Similar cu „Mod
-    page sincron”, crește și consumul de memorie, astfel încât este posibil să
-    vrei să îl dezactivezi dacă scripturile tale funcționează corect fără
-    această opțiune.
+    O metodă alternativă de injectare pentru scripturile<document-start>, mai
+    rapidă decât modul implicit. Similar cu „Mod page sincron”, crește și
+    consumul de memorie, astfel încât este posibil să vrei să îl dezactivezi
+    dacă scripturile tale funcționează corect fără această opțiune.
 labelFeedback:
   description: Label of link to feedback page.
   message: Feedback
+labelFirefoxPatchCsp:
+  description: Option in Advanced settings.
+  message: ''
+labelFirefoxPatchCspHint:
+  description: >-
+    (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
+    in Advanced settings.
+  message: ''
+labelFirefoxPatchCspPopup:
+  description: >-
+    ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
+    in the popup's extras menu.
+  message: ''
 labelGeneral:
   description: Label for general settings.
   message: Generale
+  touched: false
+labelGmDownloadViaApi:
+  description: Option in Advanced settings to use the browser download API for GM_download.
+  message: ''
+labelGmDownloadViaApiHint:
+  description: Tooltip for the browser download option in Advanced settings.
+  message: ''
+labelGrantPermission:
+  description: Button to request the API permission.
+  message: ''
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: Ajută la traducere

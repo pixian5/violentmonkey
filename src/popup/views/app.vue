@@ -84,7 +84,7 @@
       </div>
       <div class="submenu">
         <div
-          v-for="item in scope.list"
+          v-for="item in /** @type {(VMScript & ScopeListItem)[]} */scope.list"
           :key="item.id"
           :class="{
             disabled: !item.config.enabled,
@@ -98,7 +98,6 @@
           <div
             class="menu-item menu-area"
             :tabIndex
-            :data-message="item.name"
             @focus="focusedItem = item"
             @keydown.enter.exact.stop="onEditScript(item)"
             @keydown.space.exact.stop="onToggleScript(item)"
@@ -110,7 +109,7 @@
                  @contextmenu.exact.stop.prevent="onEditScript(item)"
                  @mousedown.middle.exact.stop="onEditScript(item)">
               <sup class="syntax" v-if="item.syntax" v-text="i18n('msgSyntaxError')"/>
-              {{item.name}}
+              <div class="ellipsis" v-text="item.name" :data-message="item.name"/>
               <a v-if="!store.failure && item.more"
                  class="tardy" tabindex="0" :title="TARDY_MATCH"
                  @click.stop="note = note === TARDY_MATCH ? '' : TARDY_MATCH">
@@ -158,10 +157,13 @@
               </small>
             </details>
           </div>
-          <div class="submenu-commands">
+          <div v-if="item.cmds" class="submenu-commands pos-rel">
+            <details v-show="item.cmds.length > 1" :open="!item.config[kNoCmdNames]" :item.prop="item"
+                     class="abs-full flex center-items"
+                     @click.prevent="onCmdNamesToggled"><summary/></details>
             <div
-              class="menu-item menu-area"
-              v-for="({ autoClose = true, safeIcon, text, title }, key) in store.menus[scope.depth][item.id]"
+              class="menu-item menu-area ellipsis"
+              v-for="[key, { autoClose = true, safeIcon, text, title }] of item.cmds"
               :key
               :tabIndex
               :cmd.prop="[item.id, key, autoClose]"
@@ -172,7 +174,7 @@
               @keydown.space="onCommand">
               <img v-if="safeIcon" class="icon" :src="safeIcon">
               <icon v-else name="command" />
-              <div class="flex-auto ellipsis" v-text="text" />
+              <span v-text="text" v-if="!item.config[kNoCmdNames]"/>
             </div>
           </div>
         </div>
@@ -187,11 +189,11 @@
     <div class="incognito"
        v-if="store.tab?.incognito"
        v-text="i18n('msgIncognitoChanges')"/>
-    <footer>
-      <a v-if="reloadHint" v-text="reloadHint" :tabIndex @click="reloadTab" />
+    <footer class="ellipsis" ref="$footer">
+      <template v-if="message">{{message}}</template>
+      <a v-else-if="reloadHint" v-text="reloadHint" :tabIndex @click="reloadTab" />
       <a v-else target="_blank" :href="'https://' + HOME" :tabIndex v-text="HOME" />
     </footer>
-    <div class="message" v-if="message" v-text="message"/>
     <div v-show="topExtras" ref="$topExtras" class="extras-menu">
       <div v-text="i18n('labelSettings')" @click="onManage(1)" tabindex="0"/>
       <div v-text="i18n('popupSettings')" @click="onPopupSettings" tabindex="0"/>
@@ -222,7 +224,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { VM_DOCS_INJECT_INTO, VM_DOCS_MATCHING } from '@/common/consts';
 import options from '@/common/options';
 import optionsDefaults, {
@@ -242,17 +244,20 @@ import { handleTabNavigation, isInput, kbdTypable, keyboardService } from '@/com
 import { isFullscreenPopup, store } from '../utils';
 
 let mousedownElement;
-let focusBug;
 const IS_SAFARI = process.env.TARGET === 'safari';
 const HOME = extensionManifest.homepage_url.split('/')[2];
 const NAME = `${extensionManifest.name} ${__.VM_VER}${__.MV3 ? ' MV3' : ''}`;
 const TARDY_MATCH = i18n('msgTardyMatch');
-const INJECT_LEARN = '@inject-into content\n' + i18n('learnInjectionMode');
+const INJECT_LEARN = IS_FIREFOX
+  ? i18n('labelFirefoxPatchCspPopup', ['<content>', i18n('labelFirefoxPatchCsp')])
+  : '@inject-into content\n' + i18n('learnInjectionMode');
 const SCRIPT_CLS = '.script';
 const RUN_AT_ORDER = ['start', 'body', 'end', 'idle'];
+const kNoCmdNames = 'noCmdNames';
 const needsReload = reactive({});
 const collator = getSortCollator();
 const $extras = ref();
+const $footer = ref();
 const $topExtras = ref();
 const optionsData = reactive(objectPick(optionsDefaults, [
   IS_APPLIED,
@@ -333,6 +338,7 @@ function makeInjectionScopes() {
     if (groupByEnabled != null) {
       list = list.filter(script => !script.config.enabled === !groupByEnabled);
     }
+    const menus = store.menus[depth];
     const numTotal = list.length;
     const numEnabled = groupByEnabled == null
       ? list.reduce((num, script) => num + script.config.enabled, 0)
@@ -345,6 +351,8 @@ function makeInjectionScopes() {
       const { id } = script.props;
       const { enabled, removed, shouldUpdate } = script.config;
       const upd = !removed && getScriptUpdateUrl(script, { enabledOnly });
+      const cmds = menus[id];
+      /** @namespace ScopeListItem */
       const item = {
         ...script,
         id,
@@ -359,6 +367,7 @@ function makeInjectionScopes() {
           1e6 + script.props.position
         }`,
         excludes: null,
+        cmds: cmds && Object.entries(cmds),
       };
       if (upd) item.upd = null;
       if (upd && shouldUpdate) {
@@ -367,7 +376,7 @@ function makeInjectionScopes() {
       }
       return item;
     }).sort((a, b) => collator.compare(a.key, b.key));
-    return numTotal && {
+    return numTotal && /** @namespace Scope */{
       depth,
       name,
       title,
@@ -407,7 +416,7 @@ async function showExtras(evt) {
     await nextTick();
     const menu = (isPerItem ? $extras : $topExtras).value;
     const top = Math.min(
-      innerHeight - menu.getBoundingClientRect().height,
+      $footer.value.getBoundingClientRect().y - menu.getBoundingClientRect().height,
       el.getBoundingClientRect().bottom);
     menu.style.top = `${top}px`;
   }
@@ -422,6 +431,11 @@ function onToggle() {
   options.set(IS_APPLIED, optionsData[IS_APPLIED] = !optionsData[IS_APPLIED]);
   checkReload();
   updateMessage();
+}
+function onCmdNamesToggled(evt) {
+  const { id, config } = evt.currentTarget.item;
+  const state = config[kNoCmdNames] = +!config[kNoCmdNames];
+  sendCmdDirectly('UpdateScriptInfo', { id, config: { [kNoCmdNames]: state } });
 }
 /** @param {number | MouseEvent} evt - index of tab to open in src/options/views/app.vue */
 function onManage(evt) {
@@ -603,15 +617,22 @@ function focus(item) {
 function delegateMouseEnter({ target }) {
   if (target.tabIndex >= 0) target.focus();
   else if (!target.closest('[data-message]')) message.value = '';
+  else if ((target = getEllipsizedMessage(target))) message.value = target;
 }
 function delegateMouseLeave({ target }) {
   if (target === getActiveElement() && !isInput(target)) target.blur();
 }
-function updateMessage() {
-  message.value = getActiveElement()?.dataset.message || '';
+function getEllipsizedMessage(el) {
+  el = el.querySelector('[data-message]') || el;
+  return el
+    && (!el.textContent || el.scrollWidth > el.clientWidth)
+    && el.dataset.message;
+}
+function updateMessage({ target: el = getActiveElement() } = {}) {
+  message.value = el && getEllipsizedMessage(el) || '';
 }
 function showButtons(item) {
-  return extras.value?.id === item.id || focusedItem.value?.id === item.id || focusBug;
+  return extras.value?.id === item.id || focusedItem.value?.id === item.id;
 }
 
 onMounted(() => {
@@ -640,11 +661,6 @@ onMounted(() => {
   keyboardService.register('e', () => {
     onEditScript(focusedItem.value);
   }, opts);
-});
-
-onActivated(() => {
-  // issue #1520: Firefox + Wayland doesn't autofocus the popup so CSS hover doesn't work
-  focusBug = !document.hasFocus();
 });
 </script>
 

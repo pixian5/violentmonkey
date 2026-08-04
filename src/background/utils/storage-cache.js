@@ -1,10 +1,15 @@
-import { ensureArray, ignoreChromeErrors, initHooks, isEmpty, keepAlive } from '@/common';
+import { ensureArray, ignoreChromeErrors, isEmpty, keepAlive } from '@/common';
 import initCache from '@/common/cache';
 import { INFERRED, WATCH_STORAGE } from '@/common/consts';
 import { deepCopy, deepCopyDiff, deepSize, forEachEntry } from '@/common/object';
-import { dbKeys, initializeDatabase, scriptSizes, sizesPrefixRe } from './db';
+import { S_MSG_IN, S_MSG_OUT } from './broadcast';
+import { dbKeys, initializeDatabase, sizesPrefixRe } from './db';
+import { incognitoAllowed, init } from './init';
 import { scriptSiteVisited, updateScriptMap } from './script';
-import storage, { S_MOD_PRE, S_SCRIPT_PRE, S_VALUE, S_VALUE_PRE } from './storage';
+import { flushSession, kScriptSizes, scriptSizes } from './session-data';
+import storage, {
+  fireStorageChanged, S_MOD_PRE, S_SCRIPT_PRE, S_VALUE, S_VALUE_PRE,
+} from './storage';
 import { clearValueOpener } from './values';
 
 /** Throttling browser API for `storage.value`, processing requests sequentially,
@@ -29,13 +34,6 @@ const api = /** @type {browser.storage.StorageArea} */ storage.api;
 const FLUSH_DELAY = 100;
 const FLUSH_SIZE_STEP = 1e6; // each step increases delay by FLUSH_DELAY
 const FLUSH_MAX_DELAY = 1000; // e.g. when writing more than 10MB for step=1MB and delay=100ms
-const { hook, fire } = initHooks();
-
-/**
- * Not using browser.storage.onChanged to improve performance, as it sends data across processes.
- * WARNING: when editing the db directly in devtools, restart the background page via Ctrl-R.
-*/
-export const onStorageChanged = hook;
 export const clearStorageCache = () => {
   cache.destroy();
   dbKeys.clear();
@@ -100,7 +98,7 @@ export const cachedStorageApi = storage.api = {
     cache.batch(false);
     if (!isEmpty(toWrite)) await api.set(toWrite);
     if (undoing) return;
-    if (keys.length) fire(keys, data);
+    if (keys.length && (!__.MV3 || !incognitoAllowed)) fireStorageChanged(keys, data);
     flushLater();
   },
 
@@ -123,7 +121,7 @@ export const cachedStorageApi = storage.api = {
     });
     if (toDelete.length) await api.remove(toDelete);
     if (undoing) return;
-    if (keys.length) fire(keys);
+    if (keys.length && (!__.MV3 || !incognitoAllowed)) fireStorageChanged(keys);
     flushLater();
   },
 };
@@ -135,7 +133,20 @@ if (!__.MV3) global[WATCH_STORAGE] = fn => {
   const id = performance.now();
   watchers[id] = fn;
   return id;
-};
+}; else init.then(() => incognitoAllowed &&
+  api.onChanged.addListener(changes => {
+    const keys = Object.keys(changes);
+    for (const key of keys) {
+      const val = changes[key] = changes[key].newValue;
+      const exists = val !== undefined ? 1 : 0;
+      if (key !== S_MSG_IN && key !== S_MSG_OUT) {
+        if (exists) cache.put(key, val); else cache.del(key);
+        dbKeys.set(key, exists);
+      }
+    }
+    fireStorageChanged(keys, changes);
+  })
+);
 browser.runtime.onConnect.addListener(port => {
   if (port.name === 'undoImport') return undoImport(port);
   if (!port.name.startsWith(WATCH_STORAGE)) return;
@@ -181,6 +192,7 @@ async function updateScriptSizeContributor(key, val) {
     if (size === 2 && area[0] === S_VALUE_PRE) {
       scriptSizes[key] = 0; // don't count an empty {}
     }
+    if (__.MV3) flushSession(kScriptSizes, scriptSizes);
   }
 }
 
@@ -243,7 +255,7 @@ async function undoImport(port) {
     await cachedStorageApi.set(old);
     port.postMessage(true);
     clearStorageCache();
-    await initializeDatabase();
+    await initializeDatabase(true);
     undoing = false;
   });
   old = await api.get(null);

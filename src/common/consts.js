@@ -13,14 +13,14 @@ export const USERSCRIPT_META_INTRO = '==UserScript==';
  * To match Tampermonkey's relaxed parsing, we allow any preceding text at line start
  * (i.e. not just spaces for indented metablock comments, but literally anything)
  * and inside, but we'll warn about this later in the installer/editor. */
-export const METABLOCK_RE = re`/
+export const METABLOCK_RE = regex({ disable: { n: true } })`
 # 1          2           3
   ((?:^|\n)(.*?)\/\/([\x20\t]*)==UserScript==)
 # 4
   ([\s\S]*?\n)
 # 5  6          7
   ((.*?)\/\/([\x20\t]*)==\/UserScript==)
-/x`;
+`;
 export const META_STR = 'metaStr';
 export const NEWLINE_END_RE = /\n((?!\n)\s)*$/;
 export const WATCH_STORAGE = 'watchStorage';
@@ -90,6 +90,8 @@ export const GM4_ALIAS = {
   getResourceURL: 'getResourceUrl',
   xmlhttpRequest: 'xmlHttpRequest',
 };
+export const kDownloadMode = 'downloadMode';
+export const kDownloads = 'downloads';
 export const kOrigTag = 'origTag';
 export const kTag = 'tag';
 export const kMainFrame = 'main_frame';
@@ -99,3 +101,4 @@ export const CACHE_KEYS = 'cacheKeys';
 export const REQ_KEYS = 'reqKeys';
 export const VALUE_IDS = 'valueIds';
 export const PROMISE = 'promise';
+export const TLDJS = '/public/lib/tld.js';

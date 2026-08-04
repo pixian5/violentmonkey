@@ -1,11 +1,7 @@
-import { showUnhandledError } from '@/common/ui';
-import options from './options';
+import browser from './browser';
 
 const handlers = {
   __proto__: null,
-  UpdateOptions(data) {
-    options.update(data);
-  },
 };
 
 const handleMessage = (res, src) => {
@@ -13,12 +9,14 @@ const handleMessage = (res, src) => {
   if (handle) {
     src.url = res.url || src.url; // MessageSender.url doesn't change on soft navigation
     res = handle(res.data, src);
-    res?.catch?.(showUnhandledError);
+    res?.catch?.(global.onerror);
     return res;
   }
 };
 
-browser.runtime.onMessage.addListener(handleMessage);
-if (__.MV3) chrome.runtime.onUserScriptMessage?.addListener(handleMessage);
+if (__.EXT && !__.BG) {
+  browser.runtime.onMessage.addListener(handleMessage);
+  if (__.MV3) chrome.runtime.onUserScriptMessage?.addListener(handleMessage);
+}
 
 export default handlers;

@@ -141,21 +141,39 @@ tabsOnRemoved.addListener(async id => {
 if (__.MV3) {
   chrome.webNavigation.onCommitted.addListener(info => {
     if (isTopFrame(info) && info.documentLifecycle !== 'prerender') {
-      onTabUpdated(info.tabId, info, { id: info.tabId });
+      onTabUpdated(info.tabId, info);
     }
   }, {
     // A webpage may be navigated to a non-injectable page so we need to reset the badge.
     // Listing the schemes explicitly to exclude detached devtools windows.
     url: [{ schemes: ['http', 'https', 'file', 'chrome', 'chrome-extension'] }],
   });
-} else {
-  tabsOnUpdated.addListener(onTabUpdated, FIREFOX && { properties: ['status'] });
 }
+tabsOnUpdated.addListener(onTabUpdated, FIREFOX && { properties: ['status'] });
 
-async function onTabUpdated(tabId, { url }, tab) {
+/**
+ * @param {number} tabId
+ * @param {browser.tabs._OnUpdatedChangeInfo} change
+ * @param {chrome.tabs.Tab} [tab] not present when called from webNavigation.onCommitted
+ */
+async function onTabUpdated(tabId, { url, status }, tab) {
   if (init) await init;
-  const title = url && getFailureReason(url)[0];
-  if (title) updateState(tab, resetBadgeData(tab.id, null), title);
+  const loading = status === 'loading';
+  const title = !(__.MV3 && tab && loading) // skip "loading": in MV3 we use onCommitted
+    && (url ||= tab && getTabUrl(tab)) // when tab is reloaded there's no change of url
+    && getFailureReason(url)[0];
+  // A known failure reason or no script ran since tab started to load
+  if (title || status === 'complete' && !badges[tabId]) {
+    updateState(
+      tab || { id: tabId },
+      resetBadgeData(tabId, title ? null : undefined),
+      title,
+    );
+  } else if (__.MV3 && !tab/*onCommitted*/ && badges[tabId]) {
+    // Resetting, but not updating the UI yet, waiting for scripts to run or tab load
+    delete badges[tabId];
+    flushSession(kBadges, badges);
+  }
 }
 
 function resetBadgeData(tabId, isInjected) {
@@ -206,7 +224,7 @@ export function setBadge(ids, reset, { tab, [kFrameId]: frameId, [kTop]: isTop }
 }
 
 function updateBadge({ id: tabId }, data = badges[tabId]) {
-  if (data) {
+  if (data && tabId >= 0) {
     browserAction.setBadgeText({
       text: `${data[showBadge] || ''}`,
       tabId,
@@ -215,7 +233,7 @@ function updateBadge({ id: tabId }, data = badges[tabId]) {
 }
 
 function updateBadgeColor({ id: tabId }, data = badges[tabId]) {
-  if (data) {
+  if (data && tabId >= 0) {
     browserAction.setBadgeBackgroundColor({
       color: data[INJECT] ? badgeColor : badgeColorBlocked,
       tabId,
@@ -225,6 +243,7 @@ function updateBadgeColor({ id: tabId }, data = badges[tabId]) {
 
 function updateState(tab, data, title) {
   const tabId = tab.id;
+  if (tabId < 0) return;
   if (!data) data = badges[tabId] || resetBadgeData(tabId);
   if (!title) [title] = getFailureReason(getTabUrl(tab), data);
   browserAction.setTitle({ tabId, title }).catch(noop);
@@ -236,7 +255,9 @@ async function setIcon({ id: tabId } = {}, data = badges[tabId] || {}) {
   const mod = !isApplied ? 'w'
     : data[INJECT] !== true ? 'b'
       : '';
-  if (data.icon === mod) return;
+  if (data.icon === mod || tabId < 0) {
+    return;
+  }
   data.icon = mod;
   const pathData = {};
   const iconData = {};

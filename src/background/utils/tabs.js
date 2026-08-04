@@ -7,19 +7,19 @@ import { testScript } from './tester';
 import { CHROME, FIREFOX } from './ua';
 import { vetUrl } from './url';
 
-const openerTabIdSupported = __.MV3 || !IS_FIREFOX // supported in Chrome
+const openerTabIdSupported = !IS_FIREFOX // supported in Chrome
   || !!(global.AbortSignal && browserWindows); // and FF57+ except mobile
 const EDITOR_ROUTE = extensionOptionsPage + ROUTE_SCRIPTS + '/'; // followed by id
-export const NEWTAB_URL_RE = re`/
+export const NEWTAB_URL_RE = regex`
 ^(
   about:(home|newtab) # Firefox
-  | (chrome|edge):\/\/(
-    newtab\/ # Chrome, Edge
-    | startpageshared\/ # Opera
-    | vivaldi-webui\/startpage # Vivaldi
+  | (chrome|edge)://(
+    newtab/ # Chrome, Edge
+    | startpageshared/ # Opera
+    | vivaldi-webui/startpage # Vivaldi
   )
 )$
-/x`;
+`;
 /** @returns {string|number} documentId for a pre-rendered top page, frameId otherwise */
 export const getFrameDocId = (isTop, docId, frameId) => (
   isTop === 2 && docId || frameId
@@ -219,11 +219,12 @@ tabsOnRemoved.addListener(async (id) => {
   }
 })();
 
-export async function forEachTab(callback) {
+export async function forEachTab(callback, ...args) {
   const tabs = await browser.tabs.query({});
   let i = 0;
   for (const tab of tabs) {
-    callback(tab);
+    if (callback === sendTabCmd) callback(tab.id, ...args);
+    else callback(tab, ...args);
     i += 1;
     // we'll run at most this many tabs in one event loop cycle
     // because hundreds of tabs would make our extension process unresponsive,

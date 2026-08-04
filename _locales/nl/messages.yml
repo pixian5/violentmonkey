@@ -273,6 +273,9 @@ fileInstallBlocked:
     toegang tot bestands-url's in voor Violentmonkey op chrome://extensions. Let
     op: dit wordt afgeraden, omdat elk gebruikersscript lokale bestanden kan
     uitlezen.
+fileInstallBlockedFF:
+  description: Text in the installer when a local file is dropped into Firefox window.
+  message: ''
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: alfabetisch
@@ -327,7 +330,7 @@ headerRecycleBin:
   message: Prullenbak
 helpForLocalFile:
   description: Label of the checkbox.
-  message: Instructies tonen voor slepen-en-neerzetten van lokale scripts
+  message: ''
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: voor $1 overeenkomende scripts
@@ -469,22 +472,45 @@ labelExportScriptData:
 labelExposeStatus:
   description: Option in advanced settings.
   message: 'Geïnstalleerde versies tonen aan gebruikersscriptsites: $1'
-labelFastFirefoxInject:
+labelFastInject:
   description: (`$1` will be shown as `page`) Option in Advanced settings.
-  message: Alternatieve $1-modus in Firefox
-labelFastFirefoxInjectHint:
+  message: Alternatieve $1-modus
+labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
-    Een alternatieve injectiemethode voor <document-start>scripts voor Firefox
-    59 en nieuwer. Deze methode is sneller en vergelijkbaar met ‘Synchrone
-    paginamodus’. Hierdoor is het geheugengebruik hoger, dus schakel deze optie
-    uit als scripts ook zonder deze optie werken.
+    Een alternatieve injectiemethode voor <document-start>scripts. Deze methode
+    is sneller en vergelijkbaar met ‘Synchrone paginamodus’. Hierdoor is het
+    geheugengebruik hoger, dus schakel deze optie uit als scripts ook zonder
+    deze optie werken.
 labelFeedback:
   description: Label of link to feedback page.
   message: Feedback
+labelFirefoxPatchCsp:
+  description: Option in Advanced settings.
+  message: ''
+labelFirefoxPatchCspHint:
+  description: >-
+    (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
+    in Advanced settings.
+  message: ''
+labelFirefoxPatchCspPopup:
+  description: >-
+    ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
+    in the popup's extras menu.
+  message: ''
 labelGeneral:
   description: Label for general settings.
   message: Algemeen
+  touched: false
+labelGmDownloadViaApi:
+  description: Option in Advanced settings to use the browser download API for GM_download.
+  message: ''
+labelGmDownloadViaApiHint:
+  description: Tooltip for the browser download option in Advanced settings.
+  message: ''
+labelGrantPermission:
+  description: Button to request the API permission.
+  message: ''
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: Helpen met vertalen
@@ -1080,7 +1106,7 @@ titleSearchHintV2:
     Hover title for search icon in dashboard. Do not translate content between
     <code>...</code>.
   message: >-
-    * <kbd>Enter</kbd>toets om tekst toe te voegen aan automatisch aanvullen 
+    * <kbd>Enter</kbd>toets om tekst toe te voegen aan automatisch aanvullen
 
     * Alle omstandigheden zijn hoofdletterongevoelig
 

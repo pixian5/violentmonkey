@@ -1,19 +1,40 @@
-import { debounce, keepAlive, noop, normalizeKeys, sendCmd } from '@/common';
+import { debounce, keepAlive, noop, normalizeKeys } from '@/common';
 import { kMainFrame, TIMEOUT_HOUR } from '@/common/consts';
-import { SYNC_MERGE, SYNC_PULL, SYNC_PUSH, USER_CONFIG } from '@/common/consts-sync';
+import {
+  SYNC_MERGE,
+  SYNC_PULL,
+  SYNC_PUSH,
+  USER_CONFIG,
+} from '@/common/consts-sync';
 import { forEachEntry, objectPick, objectSet } from '@/common/object';
-import { addOwnCommands, getOption, setOption } from '../utils';
+import { getOption, setOption } from '../utils';
+import broadcast from '../utils/broadcast';
 import { sortScripts, updateScriptInfo } from '../utils/db';
 import { DNR_ID_IDENTITY, updateSessionRules } from '../utils/dnr';
-import callOffscreen from '../utils/offscreen';
 import { script as pluginScript } from '../plugin';
+import { parseXml } from '@violentmonkey/xml-parser';
+import sessionData from '../utils/session-data';
 import {
-  events, getSyncState, resetSyncState, setSyncState, SYNC_AUTHORIZED, SYNC_AUTHORIZING, SYNC_ERROR,
-  SYNC_ERROR_AUTH, SYNC_ERROR_INIT, SYNC_IN_PROGRESS, SYNC_INITIALIZING, SYNC_UNAUTHORIZED,
+  events,
+  getSyncState,
+  resetSyncState,
+  setSyncState,
+  SYNC_AUTHORIZED,
+  SYNC_AUTHORIZING,
+  SYNC_ERROR,
+  SYNC_ERROR_AUTH,
+  SYNC_ERROR_INIT,
+  SYNC_IN_PROGRESS,
+  SYNC_INITIALIZING,
+  SYNC_UNAUTHORIZED,
 } from './state-machine';
 import { formatDate } from '@/common/date';
 import { getSyncActions } from '@usync/sync';
-import { OAUTH2_NEED_REFRESH, OAUTH2_UNAUTHORIZED, OAuth2Authorizers } from '@usync/oauth2';
+import {
+  OAUTH2_NEED_REFRESH,
+  OAUTH2_UNAUTHORIZED,
+  OAuth2Authorizers,
+} from '@usync/oauth2';
 import { DriveProviders } from '@usync/drive';
 
 // --- Module-level state ---
@@ -21,20 +42,32 @@ import { DriveProviders } from '@usync/drive';
 const serviceNames = [];
 const serviceClasses = [];
 const services = {};
-const syncLater = debounce(autoSync, TIMEOUT_HOUR);
-const getDrive = (...init) => !__.MV3
-  ? new DriveProviders[init.shift()](...init)
-  : Object.create(new Proxy({}, {
-    get: (obj, cmd) => (obj[cmd] =
-      (...args) => callOffscreen('Drive', [cmd, args, init.splice(0)/*emptying*/])
-    ),
-  }));
+const syncLater = !__.MV3 && debounce(autoSync, TIMEOUT_HOUR);
+// Some servers encode DAV:displayname unexpectedly (e.g. `vm%40` for `vm@`),
+// so post-process the parsed XML to decode such displaynames.
+const xmlParser = { parse: str => postProcessXml(parseXml(str, { removeNSPrefix: true }).node) };
+
+function postProcessXml(node) {
+  if (Array.isArray(node)) {
+    node.forEach(postProcessXml);
+  } else if (isObject(node)) {
+    node::forEachEntry(([key, value]) => {
+      if (key === 'displayname' && typeof value === 'string' && value.startsWith('vm%40')) {
+        try {
+          node[key] = decodeURIComponent(value);
+        } catch {
+          // Keep the original value
+        }
+      } else {
+        postProcessXml(value);
+      }
+    });
+  }
+  return node;
+}
+const getDrive = (provider, opts, ctx) => new DriveProviders[provider](opts, { ...ctx, xmlParser });
 let syncConfig;
 let syncMode = SYNC_MERGE;
-
-if (__.MV3) addOwnCommands({
-  DriveAuth: ([cmd, args]) => getService().authorizer?.[cmd](...args),
-});
 
 // --- Logging ---
 
@@ -199,7 +232,7 @@ function objectPurify(obj) {
 // --- State change listener ---
 
 const onStateChange = debounce(() => {
-  sendCmd('UpdateSync', getStates());
+  broadcast('UpdateSync', getStates());
 });
 events.on('change', (state) => {
   logInfo('status:', state.status);
@@ -252,20 +285,24 @@ export function openAuthPage(url, redirectUri) {
 
 export async function openAuthPageMV3(url, redirectUri) {
   try {
-    await updateSessionRules(DNR_ID_IDENTITY, {
-      urlFilter: '|' + redirectUri,
-      resourceTypes: ['main_frame', 'xmlhttprequest'],
-    }, {
-      type: 'redirect',
-      redirect: {
-        transform: {
-          host: chrome.identity.getRedirectURL().split('/')[2],
-          port: '',
-          scheme: 'https',
+    await updateSessionRules(
+      DNR_ID_IDENTITY,
+      {
+        urlFilter: '|' + redirectUri,
+        resourceTypes: ['main_frame', 'xmlhttprequest'],
+      },
+      {
+        type: 'redirect',
+        redirect: {
+          transform: {
+            host: chrome.identity.getRedirectURL().split('/')[2],
+            port: '',
+            scheme: 'https',
+          },
         },
       },
-    });
-    return await chrome.identity.launchWebAuthFlow({interactive: true, url});
+    );
+    return await chrome.identity.launchWebAuthFlow({ interactive: true, url });
   } finally {
     await updateSessionRules([DNR_ID_IDENTITY]);
   }
@@ -348,16 +385,25 @@ export function createSyncService({
     }
     setSyncState({ status: SYNC_INITIALIZING });
     progress.total += 1;
+    let prepareError;
     try {
       const batches = drive.list();
       // eslint-disable-next-line no-unused-vars
-      for await (const batch of __.MV3 ? getListFromPort(await batches) : batches) {
+      for await (const batch of batches) {
         break;
       }
-      setSyncState({ status: SYNC_AUTHORIZED });
     } catch (err) {
-      logError(err);
+      if ((err.response?.status) === 404 && driveProvider === 'webdav') {
+        await drive.mkdir(VIOLENTMONKEY);
+      } else {
+        prepareError = err;
+      }
+    }
+    if (prepareError) {
+      logError(prepareError);
       setSyncState({ status: SYNC_UNAUTHORIZED });
+    } else {
+      setSyncState({ status: SYNC_AUTHORIZED });
     }
     progress.finished += 1;
   }
@@ -368,7 +414,8 @@ export function createSyncService({
       const url = await authorizer.buildAuthUrl();
       const redirectUrl = await (__.MV3 ? openAuthPageMV3 : openAuthPage)(
         url,
-        providerConfig.redirect_uri);
+        providerConfig.redirect_uri,
+      );
       if (!redirectUrl) throw new Error('Authorization timed out');
       await authorizer.finishAuth(new URL(redirectUrl));
       setSyncState({ status: SYNC_AUTHORIZED });
@@ -414,9 +461,15 @@ export function createSyncService({
 
   function put(item, data) {
     const blob = new Blob([data], { type: 'text/plain' });
+    const itemName = getItemFilename(item);
     return enqueue(() =>
       drive
-        .put({ id: item.id, path: getItemFilename(item) }, blob)
+        .put(
+          item.id
+            ? { id: item.id, path: itemName }
+            : { parent: {}, name: itemName },
+          blob,
+        )
         .then(normalize),
     );
   }
@@ -440,8 +493,7 @@ export function createSyncService({
     const files = [];
     const batches = drive.list();
     progress.total += 1;
-    for await (const batch of __.MV3 ? getListFromPort(await batches) : batches) {
-      if (__.MV3 && !batch) break; // the last item is a dummy end marker
+    for await (const batch of batches) {
       files.push(...batch);
     }
     progress.finished += 1;
@@ -487,20 +539,6 @@ export function createSyncService({
       scripts,
       await pluginScript.list(),
     ];
-  }
-
-  /** @param {MessagePort} port */
-  function* getListFromPort(port) {
-    let resolver, done;
-    port.onmessage = ({ data }) => {
-      done = !data;
-      resolver(data);
-    };
-    try {
-      while (!done) yield new Promise(resolve => (resolver = resolve));
-    } finally {
-      port.onmessage = null;
-    }
   }
 
   // --- Sync algorithm ---
@@ -809,8 +847,11 @@ export function createSyncService({
           refreshToken: refreshToken || undefined,
         },
       );
-      drive = getDrive(driveProvider, { authProvider, user: '' },
-        __.MV3 ? 'auth' : { authorizer });
+      drive = getDrive(
+        driveProvider,
+        { authProvider, user: '' },
+        { authorizer },
+      );
     } else {
       initPassword();
     }
@@ -907,13 +948,17 @@ export function initialize() {
     });
   }
   resetSyncState();
-  autoSync();
+  if (!__.MV3 || !sessionData.init) {
+    autoSync();
+  }
   return !!getService();
 }
 
 export function sync() {
   const service = getService();
-  return service && Promise.resolve(service.sync()).then(syncLater);
+  return __.MV3
+    ? service?.sync()
+    : service && Promise.resolve(service.sync()).then(syncLater);
 }
 
 export function autoSync() {
@@ -921,7 +966,7 @@ export function autoSync() {
   const service = getService();
   service?.prepare();
   console.info('[sync] auto-sync disabled, check later');
-  syncLater();
+  if (!__.MV3) syncLater();
 }
 
 export function authorize() {

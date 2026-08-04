@@ -1,14 +1,13 @@
-import { buffer2string, getUniqId, isEmpty, noop } from '@/common';
+import { buffer2string, isEmpty, noop } from '@/common';
 import { forEachEntry } from '@/common/object';
 import { CHROME } from './ua';
 
 let encoder;
 
-export const VM_VERIFY = getUniqId('VM-Verify');
 /** @type {Object<string,GMReq.BG>} */
 export const requests = { __proto__: null };
 export const verify = { __proto__: null };
-export const FORBIDDEN_HEADER_RE = re`/
+export const FORBIDDEN_HEADER_RE = regex('i')`
 ^(
   # prefix matches
   proxy-|
@@ -34,7 +33,7 @@ export const FORBIDDEN_HEADER_RE = re`/
   transfer-encoding|
   upgrade|
   via
-)$/ix`;
+)$`;
 /** @type {chrome.webRequest.RequestFilter} */
 const API_FILTER = {
   urls: ['<all_urls>'],
@@ -47,21 +46,20 @@ const EXTRA_HEADERS = [
 const headersToInject = {};
 export const kCookie = 'cookie';
 export const kSetCookie = 'set-cookie';
-const SET_COOKIE_VALUE_RE = re`
-  /^\s*  (?:__(Secure|Host)-)?  ([^=\s]+)  \s*=\s*  (")?  ([!#-+\--:<-[\]-~]*)  \3(.*)  /x`;
-const SET_COOKIE_ATTR_RE = re`
-  /\s*  ;?\s*  (\w+)  (?:= (")?  ([!#-+\--:<-[\]-~]*)  \2)?  /xy`;
+const SET_COOKIE_VALUE_RE = regex({ disable: { n: true } })`
+  ^\s*  (?:__(Secure|Host)-)?  ([^=\s]+)  \s*=\s*  (")?  ([!#-+\--:\<-\[\]-~]*)  \3(.*)`;
+const SET_COOKIE_ATTR_RE = regex({ disable: { n: true }, flags: 'y' })`
+  \s*  ;?\s*  (\w+)  (?:= (")?  ([!#-+\--:\<-\[\]-~]*)  \2)?`;
 const SAME_SITE_MAP = {
   strict: 'strict',
   lax: 'lax',
   none: 'no_restriction',
 };
-const kRequestHeaders = 'requestHeaders';
+export const kRequestHeaders = 'requestHeaders';
 const API_EVENTS = {
   onBeforeSendHeaders: [onBeforeSendHeaders, kRequestHeaders, ...EXTRA_HEADERS],
   onHeadersReceived: [onHeadersReceived, kResponseHeaders, ...EXTRA_HEADERS],
 };
-if (__.MV3) API_EVENTS.onBeforeRequest = [onBeforeRequest];
 
 /** @param {chrome.webRequest.WebRequestDetails} details */
 function onHeadersReceived({ [kResponseHeaders]: headers, requestId, url }) {
@@ -82,21 +80,19 @@ function onHeadersReceived({ [kResponseHeaders]: headers, requestId, url }) {
 }
 
 /** @param {chrome.webRequest.WebRequestDetails} details */
-function onBeforeRequest({ requestId, url }) {
-  if (!verify[requestId]) {
-    const reqId = url.split('#')[1];
-    const req = requests[reqId];
+function onBeforeSendHeaders({ [kRequestHeaders]: headers, requestId, url }) {
+  let req;
+  let reqId = verify[requestId];
+  if (reqId) {
+    req = requests[reqId];
+  } else {
+    reqId = url.split('#')[1];
+    req = requests[reqId];
     if (req) {
       verify[requestId] = reqId;
       req.coreId = requestId;
     }
   }
-}
-
-/** @param {chrome.webRequest.WebRequestDetails} details */
-function onBeforeSendHeaders({ [kRequestHeaders]: headers, requestId, url }) {
-  const reqId = verify[requestId];
-  const req = requests[reqId];
   if (req) {
     // remember redirected URL with #hash as it's stripped in XHR.responseURL
     if (url !== req.xhrUrl) req.url = url;

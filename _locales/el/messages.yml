@@ -291,6 +291,9 @@ fileInstallBlocked:
     URL αρχείων». Σημειώνουμε, πάντως, πως η ενεργοποίηση αυτής της ρύθμισης
     είναι επικίνδυνη επειδή δίνει σε κάθε userscript τη δυνατότητα ανάγνωσης
     όλων των τοπικών αρχείων.
+fileInstallBlockedFF:
+  description: Text in the installer when a local file is dropped into Firefox window.
+  message: ''
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: αλφαβητικά
@@ -345,7 +348,7 @@ headerRecycleBin:
   message: Κάδος Ανακύκλωσης
 helpForLocalFile:
   description: Label of the checkbox.
-  message: Εμφάνιση οδηγιών για τα τοπικά script που έχουν μεταφερθεί και αποτεθεί
+  message: ''
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: θα εφαρμοστεί σε $1 script
@@ -494,25 +497,47 @@ labelExposeStatus:
   message: >-
     Εμφάνιση της εγκατεστημένης έκδοσης σε ιστοσελίδες με καταλόγους userscript:
     $1
-labelFastFirefoxInject:
+labelFastInject:
   description: (`$1` will be shown as `page`) Option in Advanced settings.
-  message: Εναλλακτική λειτουργία $1 για Firefox
-labelFastFirefoxInjectHint:
+  message: Εναλλακτική λειτουργία $1
+labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
     Ένας εναλλακτικός τρόπος εκτέλεσης για τα script που χρησιμοποιούν το
-    <document-start>, διαθέσιμος στις νεότερες εκδόσεις του Firefox (59 και
-    εξής) και ο οποίος είναι γρηγορότερος από τον προεπιλεγμένο. Όπως και με την
-    επιλογή «Λειτουργία συγχρονισμένης σελίδας», η ρύθμιση αυτή έχει ως
-    αποτέλεσμα τη δέσμευση περισσότερης μνήμης. Σε περίπτωση, δηλαδή, που τα
-    script λειτουργούν κανονικά χωρίς αυτή τη ρύθμιση, ίσως είναι καλύτερο να
-    την απενεργοποιήσετε.
+    <document-start>, και ο οποίος είναι γρηγορότερος από τον προεπιλεγμένο.
+    Όπως και με την επιλογή «Λειτουργία συγχρονισμένης σελίδας», η ρύθμιση αυτή
+    έχει ως αποτέλεσμα τη δέσμευση περισσότερης μνήμης. Σε περίπτωση, δηλαδή,
+    που τα script λειτουργούν κανονικά χωρίς αυτή τη ρύθμιση, ίσως είναι
+    καλύτερο να την απενεργοποιήσετε.
 labelFeedback:
   description: Label of link to feedback page.
   message: Σχόλια
+labelFirefoxPatchCsp:
+  description: Option in Advanced settings.
+  message: ''
+labelFirefoxPatchCspHint:
+  description: >-
+    (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
+    in Advanced settings.
+  message: ''
+labelFirefoxPatchCspPopup:
+  description: >-
+    ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
+    in the popup's extras menu.
+  message: ''
 labelGeneral:
   description: Label for general settings.
   message: Γενικές ρυθμίσεις
+  touched: false
+labelGmDownloadViaApi:
+  description: Option in Advanced settings to use the browser download API for GM_download.
+  message: ''
+labelGmDownloadViaApiHint:
+  description: Tooltip for the browser download option in Advanced settings.
+  message: ''
+labelGrantPermission:
+  description: Button to request the API permission.
+  message: ''
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: Βοηθήστε στη μετάφραση

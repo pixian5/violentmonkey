@@ -1,16 +1,18 @@
-import { browserWindows, getTab, getUniqId, i18n, noop, request, sendTabCmd } from '@/common';
+import { browserWindows, getTab, getUniqId, i18n, isRemote, noop, sendTabCmd } from '@/common';
+import browser from '@/common/browser';
 import { executeScript } from '@/common/browser-scripts-api';
-import { FILE_GLOB_ALL, kMainFrame } from '@/common/consts';
+import { FILE_GLOB_ALL, kMainFrame, NO_CACHE } from '@/common/consts';
 import cache from './cache';
 import { addPublicCommands, commands } from './init';
 import { getOption } from './options';
 import { matchUserScript, parseMeta } from './script';
 import { fileSchemeRequestable, getTabUrl, NEWTAB_URL_RE, tabsOnUpdated } from './tabs';
 import { FIREFOX } from './ua';
+import { request } from './url';
 
 addPublicCommands({
   async CheckInstallerTab(tabId, src) {
-    const tab = !__.MV3 && IS_FIREFOX && (src.url || '').startsWith('file:') && await getTab(tabId);
+    const tab = IS_FIREFOX && (src.url || '').startsWith('file:') && await getTab(tabId);
     return tab && getTabUrl(tab).startsWith(CONFIRM_URL_BASE);
   },
   ConfirmInstall: confirmInstall,
@@ -19,8 +21,8 @@ addPublicCommands({
 async function confirmInstall({ code, from, url, fs, parsed }, { tab = {} }) {
   if (!fs) {
     code ??= parsed
-      ? request(url).then(r => r.data) // cache the Promise and start fetching now
-      : (await request(url)).data;
+      ? request(url, NO_CACHE).then(r => r.data) // cache the Promise and start fetching now
+      : (await request(url, NO_CACHE)).data;
     // TODO: display the error in UI
     if (!parsed && !matchUserScript(code)) {
       throw `${i18n('msgInvalidScript')}\n\n${
@@ -30,7 +32,7 @@ async function confirmInstall({ code, from, url, fs, parsed }, { tab = {} }) {
     }
     cache.put(url, code, 3000);
   }
-  const confirmKey = getUniqId();
+  const confirmKey = getUniqId('', true);
   const { active, id: tabId, incognito } = tab;
   // Not testing tab.pendingUrl because it will be always equal to `url`
   const canReplaceCurTab = __.MV3 || (!incognito || IS_FIREFOX) && (
@@ -49,42 +51,36 @@ async function confirmInstall({ code, from, url, fs, parsed }, { tab = {} }) {
   }
 }
 
-const whitelistRe = re`/^https:\/\/(
-  (greas|sleaz)yfork\.(org|cc)\/scripts\/[^/]*\/code|
-  update\.(greas|sleaz)yfork\.(org|cc)\/scripts|
-  openuserjs\.org\/install\/[^/]*|
-  github\.com\/[^/]*\/[^/]*\/(
-    raw\/[^/]*|
-    releases\/(
-      download\/[^/]* |
-      latest\/download
+const whitelistRe = regex('i')`^https://(
+  (greas|sleaz)yfork\.(org|cc)/scripts/[^\/]*/code|
+  update\.(greas|sleaz)yfork\.(org|cc)/scripts(/\d+)?| # old version part is optional
+  openuserjs\.org/install/[^\/]*|
+  github\.com/[^\/]*/[^\/]*/(
+    raw/[^\/]*|
+    releases/(
+      download/[^\/]* |
+      latest/download
     )
   )|
-  raw\.githubusercontent\.com(\/[^/]*){3}|
-  gist\.github\.com\/.*?
-)\/[^/]*?\.user\.js  ([?#]|$)  /ix`;
-const blacklistRe = re`/^https?:\/\/(
+  raw\.githubusercontent\.com(/[^\/]*){3}|
+  gist\.github\.com/.*?
+)/[^\/]*?\.user\.js  ([?#]|$)`;
+const blacklistRe = regex('i')`^https?://(
   (gist\.)?github\.com|
   ((greas|sleaz)yfork|openuserjs)\.(org|cc)
-)\//ix`;
+)/`;
 export const resolveVirtualUrl = url => (
   `${extensionOptionsPage}${ROUTE_SCRIPTS}/${+url.split('#')[1]}`
 );
 // FF can't intercept virtual .user.js URL via webRequest, so we redirect it explicitly
-const virtualUrlRe = !__.MV3 && IS_FIREFOX && new RegExp((
+const virtualUrlRe = IS_FIREFOX && new RegExp((
   `^(view-source:)?(${extensionRoot.replace('://', '$&)?')}[^/]*\\.user\\.js#\\d+`
 ));
-const maybeRedirectVirtualUrlFF = virtualUrlRe && ((tabId, src) => {
-  if (virtualUrlRe.test(src)) {
-    browser.tabs.update(tabId, { url: resolveVirtualUrl(src) });
-  }
-});
-
 async function maybeInstallUserJs(tabId, url, isWhitelisted) {
   if (__.MV3 && isWhitelisted) sendTabCmd(tabId, 'Stop');
   // Getting the tab now before it navigated
   const tab = tabId >= 0 && await getTab(tabId) || {};
-  const { data: code } = !isWhitelisted && await request(url).catch(noop) || {};
+  const { data: code } = !isWhitelisted && await request(url, NO_CACHE).catch(noop) || {};
   if (isWhitelisted || code && parseMeta(code).name) {
     confirmInstall({ code, url, from: tab.url, parsed: true }, { tab });
   } else {
@@ -95,22 +91,15 @@ ${code?.length > 1e6 ? code.slice(0, 1e6) + '...' : code}`;
     if (tabId < 0) {
       console.warn(error);
     } else {
-      executeScript(tabId, `console.warn(${JSON.stringify(error)})`, 'document_start');
+      executeScript(tabId, `console.warn(${JSON.stringify(error)})`, 'document_start').catch(noop);
       browser.tabs.update(tabId, { url });
     }
   }
 }
 
-if (virtualUrlRe) {
-  tabsOnUpdated.addListener(
-    (tabId, { url }) => url && maybeRedirectVirtualUrlFF(tabId, url),
-    FIREFOX && { properties: [FIREFOX >= 88 ? 'url' : 'status'] }
-  );
-}
-
-browser.tabs.onCreated.addListener((tab) => {
+tabsOnUpdated.addListener(async (tabId, { url }, tab) => {
+  if (!url) return;
   const { id, title } = tab;
-  const url = getTabUrl(tab);
   const isFile = url.startsWith('file:');
   const isUserJS = /\.user\.js([?#]|$)/.test(url);
   /* Determining if this tab can be auto-closed (replaced, actually).
@@ -118,14 +107,18 @@ browser.tabs.onCreated.addListener((tab) => {
   if (isUserJS && !isFile) {
     cache.put(`autoclose:${id}`, true, 10e3);
   }
-  if (virtualUrlRe && url === 'about:blank') {
-    maybeRedirectVirtualUrlFF(id, title);
-  }
-  if (isUserJS && isFile && !fileSchemeRequestable && !IS_FIREFOX
-  && getOption('helpForLocalFile')) {
+  if (url === 'about:blank' && virtualUrlRe && virtualUrlRe.test(title)) {
+    browser.tabs.update(id, { url: resolveVirtualUrl(title) });
+  } else if (isUserJS && isFile && getOption('helpForLocalFile') && (
+    IS_FIREFOX
+      // FF153 requires user explicitly enabling file: access (without reloading the extension)
+      ? IDBIndex.prototype.getAllRecords &&
+        !await browser.extension.isAllowedFileSchemeAccess()
+      : !fileSchemeRequestable
+  )) {
     confirmInstall({ url, fs: true }, { tab });
   }
-});
+}, !__.MV3 && FIREFOX && { properties: [FIREFOX >= 88 ? 'url' : 'status'] });
 
 browser.webRequest?.onBeforeRequest?.addListener((req) => {
   const { method, tabId, url } = req;
@@ -137,8 +130,11 @@ browser.webRequest?.onBeforeRequest?.addListener((req) => {
     return { redirectUrl: resolveVirtualUrl(url) };
   }
   let isWhitelisted;
-  if (!cache.has(`bypass:${url}`)
-  && ((isWhitelisted = whitelistRe.test(url)) || !blacklistRe.test(url))) {
+  if (!cache.has(`bypass:${url}`) && (
+    (isWhitelisted = whitelistRe.test(url))
+    || !blacklistRe.test(url)
+    || !isRemote(url)
+  )) {
     maybeInstallUserJs(tabId, url, isWhitelisted);
     return IS_FIREFOX
       ? { cancel: true } // for sites with strict CSP in FF

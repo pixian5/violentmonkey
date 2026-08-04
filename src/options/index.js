@@ -60,7 +60,8 @@ function initScript(script, sizes, code) {
 }
 
 export function loadData() {
-  const id = +store.route.paths[1];
+  if (__.MV3) sendCmdDirectly('GetInjectorError').then(err => { store.error = err; });
+  const id = (!__.MV3 || !store.busyId) && +store.route.paths[1];
   return requestData(id)
   .catch(id && (() => requestData()));
   /* Catching in order to retry without an id if the id is invalid.
@@ -106,6 +107,9 @@ function getUniqTags(script, custom = script.custom, meta) {
 Object.assign(handlers, {
   ScriptsUpdated() {
     loadData();
+  },
+  SetPermissions(data) {
+    Object.assign(store, data);
   },
   UpdateSync(data) {
     store.sync = data;

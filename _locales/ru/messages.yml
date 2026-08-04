@@ -144,7 +144,7 @@ confirmUndoImport:
     редактирование, настройка)
 descBlacklist:
   description: Description for the global injection blacklist.
-  message: Чёрный список инъекций (скрипты не будут запускаться на указанных сайтах)
+  message: Чёрный список внедрения (скрипты не будут запускаться на указанных сайтах)
 descBlacklistNet:
   description: Description for the global network blacklist.
   message: >-
@@ -154,7 +154,7 @@ descCustomCSS:
   description: Description of custom CSS section.
   message: >-
     Пользовательский стиль CSS для страниц настроек и установки скриптов. Если
-    вы не знаете, зачем это нужно, пожалуйста, не редактируйте его.
+    вы не знаете, зачем это нужно, пожалуйста, не изменяйте его.
 descEditorOptions:
   description: Description of editor options JSON section.
   message: >-
@@ -189,13 +189,13 @@ disabledScriptsGroup:
   message: группировать
 disabledScriptsHide:
   description: 'Used as "Disabled scripts: hide"'
-  message: скрыть
+  message: скрывать
 disabledScriptsSelector:
   description: Label of the option.
   message: 'Отключённые скрипты:'
 disabledScriptsShow:
   description: 'Used as "Disabled scripts: show"'
-  message: показать
+  message: показывать
 editHelpDocumentation:
   description: Label in the editor help tab for the documentation link.
   message: 'Документация по блоку метаданных скриптов и <code>GM</code> API:'
@@ -274,9 +274,14 @@ fileInstallBlocked:
     открывать локальные файлы по ссылкам» в сведениях Violentmonkey на странице
     chrome://extensions. Это опасно, так как любой пользовательский скрипт может
     прочитать любой локальный файл.
+fileInstallBlockedFF:
+  description: Text in the installer when a local file is dropped into Firefox window.
+  message: >-
+    Откройте about:addons, щёлкните Violentmonkey, нажмите «Разрешения и
+    данные», включите «Доступ к локальным файлам на вашем компьютере».
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
-  message: алфавитному порядку
+  message: алфавиту
 filterExecutionOrder:
   description: Label for option to sort scripts in execution order.
   message: порядку выполнения
@@ -328,7 +333,7 @@ headerRecycleBin:
   message: Корзина
 helpForLocalFile:
   description: Label of the checkbox.
-  message: Показать инструкцию по перетаскиванию локальных скриптов
+  message: Показывать справку, если не удаётся установить локальный скрипт
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: применить к этим ($1) скриптам
@@ -470,22 +475,52 @@ labelExportScriptData:
 labelExposeStatus:
   description: Option in advanced settings.
   message: 'Показывать версию установленного скрипта на сайтах каталогов скриптов: $1'
-labelFastFirefoxInject:
+labelFastInject:
   description: (`$1` will be shown as `page`) Option in Advanced settings.
-  message: Альтернативный режим $1 в Firefox
-labelFastFirefoxInjectHint:
+  message: Альтернативный режим $1
+labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
-    Альтернативный способ внедрения для скриптов <document-start> с Firefox 59,
-    более быстрый, чем режим по умолчанию. Как и «Синхронный режим страницы», он
-    также увеличивает потребление памяти, поэтому вы можете отключить его, если
-    ваши скрипты работают верно без этого параметра.
+    Альтернативный способ внедрения для скриптов <document-start>, более
+    быстрый, чем режим по умолчанию. Как и «Синхронный режим страницы», он также
+    увеличивает потребление памяти, поэтому вы можете отключить его, если ваши
+    скрипты работают верно без этого параметра.
 labelFeedback:
   description: Label of link to feedback page.
   message: Обратная связь
+labelFirefoxPatchCsp:
+  description: Option in Advanced settings.
+  message: Обход CSP в Firefox
+labelFirefoxPatchCspHint:
+  description: >-
+    (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
+    in Advanced settings.
+  message: >-
+    Добавляет случайное значение в CSP веб-страниц, которое может использовать
+    только Violentmonkey для запуска скриптов в режиме внедрения $1, в противном
+    случае скрипты придётся править для использования $2.
+labelFirefoxPatchCspPopup:
+  description: >-
+    ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
+    in the popup's extras menu.
+  message: >-
+    Изолированный режим $1 может ограничивать функциональность, см. «$2» в
+    параметрах.
 labelGeneral:
   description: Label for general settings.
   message: Общие настройки
+  touched: false
+labelGmDownloadViaApi:
+  description: Option in Advanced settings to use the browser download API for GM_download.
+  message: Использовать API загрузки из браузера
+labelGmDownloadViaApiHint:
+  description: Tooltip for the browser download option in Advanced settings.
+  message: >-
+    Позволяет скриптам сохранять файлы во вложенных папках внутри вашего
+    каталога загрузок и отображать ход загрузки в панели загрузки браузера.
+labelGrantPermission:
+  description: Button to request the API permission.
+  message: Предоставить разрешение
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: Улучшить перевод
@@ -848,7 +883,7 @@ msgNamespaceConflict:
     Message shown when namespace of the new script conflicts with an existent
     one.
   message: |-
-    Конфликт пространства имён скрипта. 
+    Конфликт пространства имён скрипта.
     Пожалуйста, смените @name и @namespace здесь или исправьте этот скрипт.
 msgNamespaceConflictRestore:
   description: >-
@@ -1104,7 +1139,7 @@ titleSearchHintV2:
     <code>name:/\w+?/</code>, <code>name+re:"\w+? с пробелом"</code>
 toggleInjection:
   description: Label for a keyboard shortcut.
-  message: Переключить инъекцию пользовательского скрипта
+  message: Переключить внедрение пользовательского скрипта
 trackEdits:
   description: Button in a script installation dialog.
   message: Отслеживать внешние правки

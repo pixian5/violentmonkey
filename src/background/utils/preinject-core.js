@@ -1,30 +1,36 @@
 import { noop, sendTabCmd } from '@/common';
-import { executeScript, INJECTED_DATA_ID } from '@/common/browser-scripts-api';
+import { executeScript, INJECTED_API_ID, INJECTED_DATA_ID } from '@/common/browser-scripts-api';
 import initCache from '@/common/cache';
 import {
-  __CODE, BLACKLIST, CACHE_KEYS, GLOB_ALL, kMainFrame, kSubFrame, REQ_KEYS, UNWRAP, VALUE_IDS,
-  XHR_COOKIE_RE,
+  __CODE, BLACKLIST, CACHE_KEYS, GLOB_ALL, kDownloadMode, kMainFrame, kSubFrame, REQ_KEYS, UNWRAP,
+  VALUE_IDS, XHR_COOKIE_RE,
 } from '@/common/consts';
 import { forEachEntry, objectSet } from '@/common/object';
-import { kPageMenuCommands } from '@/common/options-defaults';
+import { kGmDownloadViaApi, kPageMenuCommands } from '@/common/options-defaults';
 import { revokeBlobRules } from './dnr';
 import { clearNotifications } from './notifications';
-import { hookOptionsInit } from './options';
+import { getOption, hookOptionsInit } from './options';
 import { addMenuConfig } from './page-menu-commands';
+import { onPermissionChanged, permissionDownloads } from './permissions';
 import { normalizeRealm, prepare, prepareXhrBlob } from './preinject-prepare';
 import { clearRequestsByTabId } from './requests';
 import { kSetCookie } from './requests-core';
+import { flushSession, skippedTabs } from './session-data';
 import { S_CACHE_PRE, S_CODE_PRE, S_REQUIRE_PRE, S_SCRIPT_PRE, S_VALUE_PRE } from './storage';
 import { clearStorageCache } from './storage-cache';
-import { tabsOnRemoved } from './tabs';
+import { forEachTab, tabsOnRemoved } from './tabs';
 import { clearValueOpener } from './values';
 
 const IS_SAFARI = process.env.TARGET === 'safari';
 
 export let isApplied;
 export let injectInto;
+export let downloadMode;
+export let ffCsp;
 export let ffInject;
 export let xhrInject = false; // must be initialized for proper comparison when toggling
+export let lastRegDuration = 0;
+export let lastRegTime = 0;
 let xhrInjectKey;
 
 const API_HEADERS_RECEIVED = browser.webRequest?.onHeadersReceived;
@@ -79,7 +85,6 @@ export const getKey = (url, isTop) => (
 );
 /** @param {chrome.webRequest.WebRequestDetails} info */
 export const isTopFrame = info => info.frameType === 'outermost_frame' || !info[kFrameId];
-export const skippedTabs = {};
 
 const OPT_HANDLERS = {
   [BLACKLIST]: cache.destroy,
@@ -113,9 +118,14 @@ const OPT_HANDLERS = {
       expose[decodeURIComponent(site)] = isExposed;
     });
   },
+  ffCsp: value => {
+    if (ffCsp != null) cache.destroy();
+    ffCsp = value;
+  },
+  [kGmDownloadViaApi]: updateDownloadMode,
 };
-if (contentScriptsAPI) OPT_HANDLERS.ffInject = toggleFastFirefoxInject;
-
+if (__.MV3 || contentScriptsAPI) OPT_HANDLERS.ffInject = toggleFastForwardInject;
+onPermissionChanged.add(() => updateDownloadMode(getOption(kGmDownloadViaApi)));
 hookOptionsInit(onOptionChanged);
 
 function onOptionChanged(changes) {
@@ -168,7 +178,7 @@ function togglePreinject(enable) {
   }
 }
 
-function toggleFastFirefoxInject(enable) {
+function toggleFastForwardInject(enable) {
   ffInject = enable;
   if (!enable) {
     cache.some(v => { unregisterScript(v); /* must return falsy! */ });
@@ -212,7 +222,9 @@ export function injectContentRealm(toContent, tabId, frameId) {
 // TODO: rework the whole thing to register scripts individually with real `matches`
 // (this will also allow proper handling of @noframes)
 export function registerScriptData(inject, url) {
+  const t = performance.now();
   addMenuConfig(inject);
+  (/**@type{VMInjection}*/inject).info.gmi[kDownloadMode] = downloadMode;
   for (const scr of inject[SCRIPTS]) {
     scr.code = scr[__CODE];
   }
@@ -224,12 +236,22 @@ export function registerScriptData(inject, url) {
     matches: [url.split('#', 1)[0].replace(/\*/g, '\\$&')], // escape `*` in the URL itself
     [RUN_AT]: 'document_start',
   };
-  if (__.MV3) {
-    inject.id = INJECTED_DATA_ID + url;
-    inject = [inject];
-    chrome.userScripts.update(inject).catch(noop);
-  }
-  return (__.MV3 ? chrome.userScripts : contentScriptsAPI).register(inject).catch(noop);
+  lastRegTime = performance.now();
+  lastRegDuration = lastRegTime - t;
+  return (__.MV3
+    ? registerScriptDataMV3(inject, url)
+    : contentScriptsAPI.register(inject)
+  ).catch(__.DEV ? console.warn : noop);
+}
+
+async function registerScriptDataMV3(inject, url) {
+  try {
+    await chrome.userScripts.unregister({ ids: [inject.id = INJECTED_DATA_ID + url] });
+  } catch {/*ignore*/}
+  // Chrome runs scripts in the order of register & update
+  const res = chrome.userScripts.register([inject]);
+  chrome.userScripts.update([{ id: INJECTED_API_ID, matches: ['<all_urls>', url] }]);
+  return res;
 }
 
 /** @param {VMInjection.Bag} bag */
@@ -250,7 +272,8 @@ export function unregisterScript(bag) {
  * @param {browser.webRequest.BlockingResponse} response
  */
 function detectStrictCsp(info, bag, response) {
-  const h = info[kResponseHeaders].find(findCspHeader);
+  const headers = info[kResponseHeaders];
+  const h = headers.find(findCspHeader);
   if (!h) return;
   let tmp = '';
   let m, scriptSrc, scriptElemSrc, defaultSrc;
@@ -258,31 +281,39 @@ function detectStrictCsp(info, bag, response) {
     tmp += m[2] ? (defaultSrc = m[3]) : m[1] ? (scriptElemSrc = m[3]) : (scriptSrc = m[3]);
   }
   if (!tmp) return;
-  const nonce = tmp.match(NONCE_RE);
+  let nonce = tmp.match(NONCE_RE);
   if (nonce) {
-    bag[INJECT].nonce = nonce[1];
+    nonce = nonce[1];
   } else if (
     scriptSrc && !scriptSrc.includes(UNSAFE_INLINE) ||
     scriptElemSrc && !scriptElemSrc.includes(UNSAFE_INLINE) ||
     !scriptSrc && !scriptElemSrc && defaultSrc && !defaultSrc.includes(UNSAFE_INLINE)
   ) {
-    bag[FORCE_CONTENT] = bag[INJECT][FORCE_CONTENT] = true;
+    if (ffCsp) {
+      nonce = crypto.randomUUID();
+      h.value = h.value.replace(CSP_RE, `$& 'nonce-${nonce}'`);
+      response ||= { [kResponseHeaders]: headers };
+    } else {
+      bag[FORCE_CONTENT] = bag[INJECT][FORCE_CONTENT] = true;
+    }
   } else {
     return;
   }
-  // Always unregister, then re-register if no nonce to avoid reusing the old value on tab reload
-  if (contentScriptsAPI && unregisterScript(bag) && !nonce) {
+  if (nonce) bag[INJECT].nonce = nonce;
+  if (contentScriptsAPI && unregisterScript(bag)) {
     bag.csStop?.(); // resolving a potential deadlock in CS API on a fast redirect
     return Promise.race([
       bag[CSAPI_REG] = registerScriptData(bag[INJECT], info.url),
       new Promise(resolve => (bag.csStop = resolve)),
     ]).then(() => (bag.csStop = null, response));
   }
+  return response;
 }
 
 function onTabRemoved(id /* , info */) {
   clearFrameData(id, 0, true);
   delete skippedTabs[id];
+  if (__.MV3) flushSession(SKIP_SCRIPTS, skippedTabs);
 }
 
 function onTabReplaced(addedId, removedId) {
@@ -293,4 +324,14 @@ function clearFrameData(tabId, frameId, tabRemoved) {
   clearRequestsByTabId(tabId, frameId);
   clearValueOpener(tabId, frameId);
   clearNotifications(tabId, frameId, tabRemoved);
+}
+
+function updateDownloadMode(val) {
+  val = val && permissionDownloads ? 'browser' : 'native';
+  if (downloadMode !== val) {
+    if (downloadMode != null) {
+      forEachTab(sendTabCmd, 'SetGMI', { [kDownloadMode]: val });
+    }
+    downloadMode = val;
+  }
 }

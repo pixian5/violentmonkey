@@ -4,6 +4,7 @@ export const kAutocompleteOnTyping = 'autocompleteOnTyping';
 export const kEditAsString = 'editAsString';
 export const kFiltersPopup = 'filtersPopup';
 export const kGmCookieHttpOnly = 'gmCookieHttpOnly';
+export const kGmDownloadViaApi = 'gmDownloadViaApi';
 export const kKillTrailingSpaceOnSave = 'killTrailingSpaceOnSave';
 export const kPageMenuCommands = 'pageMenuCommands';
 export const kPopupWidth = 'popupWidth';
@@ -32,6 +33,7 @@ export default {
   [kPopupWidth]: 320,
   [kUpdateEnabledScriptsOnly]: true,
   [kGmCookieHttpOnly]: false,
+  [kGmDownloadViaApi]: false,
   [kPageMenuCommands]: false,
   autoUpdate: 1, // days, 0 = disable
   // ignoreGrant: false,
@@ -65,7 +67,8 @@ export default {
   version: null,
   /** @type {VMScriptInjectInto} */
   defaultInjectInto: AUTO,
-  ffInject: true,
+  ffCsp: false,
+  ffInject: false,
   xhrInject: false,
   filters: {
     /** @type {boolean} */

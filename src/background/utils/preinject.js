@@ -1,5 +1,5 @@
 import { getActiveTab, sendTabCmd } from '@/common';
-import { CACHE_KEYS, PROMISE } from '@/common/consts';
+import { CACHE_KEYS, kDownloadMode, PROMISE } from '@/common/consts';
 import { deepCopy } from '@/common/object';
 import { getScriptsByURL } from './db';
 import { setBadge } from './icon';
@@ -8,14 +8,16 @@ import { clearNotifications } from './notifications';
 import { addMenuConfig, setMenus } from './page-menu-commands';
 import { popupTabs } from './popup-tracker';
 import {
-  cache, contentScriptsAPI, CSAPI_REG, getKey, injectContentRealm, isApplied, propsToClear,
-  skippedTabs, unregisterScript,
+  cache, contentScriptsAPI, CSAPI_REG, downloadMode, getKey, injectContentRealm, isApplied,
+  propsToClear, unregisterScript,
 } from './preinject-core';
 import { prepare, prepareScripts, triageRealms } from './preinject-prepare';
 import { clearRequestsByTabId, reifyRequests } from './requests';
 import { updateVisitedTime } from './script';
-import { S_CACHE, S_REQUIRE_PRE, S_SCRIPT_PRE, S_VALUE, S_VALUE_PRE } from './storage';
-import { onStorageChanged } from './storage-cache';
+import { flushSession, skippedTabs } from './session-data';
+import {
+  onStorageChanged, S_CACHE, S_REQUIRE_PRE, S_SCRIPT_PRE, S_VALUE, S_VALUE_PRE,
+} from './storage';
 import { getFrameDocId, getFrameDocIdAsObj } from './tabs';
 import { addValueOpener, clearValueOpener, reifyValueOpener } from './values';
 
@@ -33,13 +35,19 @@ addPublicCommands({
     clearFrameData(tabId, frameDoc);
     let skip = skippedTabs[tabId];
     if (skip > 0) { // first time loading the tab after skipScripts was invoked
-      if (isTop) skippedTabs[tabId] = -1; // keeping a phantom for future iframes in this page
+      if (isTop) {
+        skippedTabs[tabId] = -1; // keeping a phantom for future iframes in this page
+        if (__.MV3) flushSession(SKIP_SCRIPTS, skippedTabs);
+      }
       if (popupTabs[tabId]) sendPopupShown(tabId, frameDoc);
       return { [INJECT_INTO]: SKIP_SCRIPTS };
     }
-    if (skip) delete skippedTabs[tabId]; // deleting the phantom as we're in a new page
+    if (skip) {
+      delete skippedTabs[tabId]; // deleting the phantom as we're in a new page
+      if (__.MV3) flushSession(SKIP_SCRIPTS, skippedTabs);
+    }
     const bagKey = getKey(url, isTop);
-    const bagP = cache.get(bagKey) || prepare(bagKey, url, isTop);
+    const bagP = cache.get(bagKey) || prepare(bagKey, url, isTop, true);
     const bag = bagP[INJECT] ? bagP : await bagP[PROMISE];
     /** @type {VMInjection} */
     const inject = bag[INJECT];
@@ -51,7 +59,8 @@ addPublicCommands({
       if (isTop < 2/* skip prerendered pages*/ && scripts.length) {
         updateVisitedTime(scripts);
       }
-      inject.info.gmi = { isIncognito: tab.incognito };
+      inject.info.gmi[kDownloadMode] = downloadMode;
+      inject.info.gmi.isIncognito = tab.incognito;
     }
     if (popupTabs[tabId]) {
       sendPopupShown(tabId, frameDoc);
@@ -148,6 +157,7 @@ export async function reloadAndSkipScripts(tab) {
   const bag = cache.get(getKey(tab.url, true));
   const reg = (__.MV3 ? chrome.userScripts : contentScriptsAPI) && bag && unregisterScript(bag);
   skippedTabs[tabId] = 1;
+  if (__.MV3) flushSession(SKIP_SCRIPTS, skippedTabs);
   if (reg) await reg;
   clearFrameData(tabId);
   await browser.tabs.reload(tabId);

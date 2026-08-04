@@ -23,7 +23,7 @@ jobs:
           node-version-file: 'package.json'
 
       - name: Prepare
-        run: pnpm i && node scripts/action-helper.js
+        run: pnpm ci && node scripts/action-helper.js
         env:
           ACTION_BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           DISCORD_WEBHOOK_RELEASE: ${{ secrets.DISCORD_WEBHOOK_RELEASE }}
@@ -52,6 +52,7 @@ jobs:
             if ! deno run -A https://raw.githubusercontent.com/violentmonkey/publish-edge-ext/main/main.ts $ASSETS_DIR/$ASSET_ZIP 2>"$TEMP_DIR/stderr.log"; then
               export ERROR=$(cat "$TEMP_DIR/stderr.log" 2>/dev/null || true)
               ERROR="${ERROR:-Edge publish failed}"
+              echo "$ERROR"
             fi
             export TARGET=Edge
             node scripts/notify-release.mjs
@@ -59,6 +60,6 @@ jobs:
             echo Skip BETA for Edge
           fi
         env:
-          CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
-          API_KEY: ${{ secrets.EDGE_API_KEY }}
-          PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}

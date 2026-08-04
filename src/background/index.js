@@ -15,8 +15,8 @@ import './utils/tester';
 import './utils/update';
 import callOffscreen from './utils/offscreen';
 
-if (!__.MV3) addPublicCommands({
-  SetClipboard: setClipboard,
+addPublicCommands({
+  SetClipboard: __.MV3 ? callOffscreen : setClipboard,
 });
 addPublicCommands({
   /**
@@ -33,8 +33,9 @@ export function handleCommandMessage({ cmd, data, url, [kTop]: mode } = {}, src)
   if (init) {
     return init.then(handleCommandMessage.bind(this, ...arguments));
   }
-  const func = commands[cmd] || __.MV3 && cmd === 'SetClipboard' && cmd;
+  let func = commands[cmd];
   if (!func) return; // not responding to commands for popup/options
+  if (func === callOffscreen) func = cmd;
   // The `src` is omitted when invoked via sendCmdDirectly unless fakeSrc is set.
   // The `origin` is Chrome-only, it can't be spoofed by a compromised tab unlike `url`.
   if (src) {
@@ -74,7 +75,6 @@ async function handleCommandMessageAsync(func, data, src) {
 }
 
 if (!__.MV3) {
-  global._bg = 1;
   global['handle' + 'CommandMessage' /* hiding the global from IDE */] = handleCommandMessage;
   global['deep' + 'Copy' /* hiding the global from IDE */] = deepCopy;
 }

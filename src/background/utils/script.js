@@ -1,5 +1,5 @@
 import {
-  encodeFilename, getFullUrl, getScriptHome, getScriptSupportUrl, getTab, i18n, sendCmd,
+  encodeFilename, getFullUrl, getScriptHome, getScriptSupportUrl, getTab, i18n,
 } from '@/common';
 import {
   __CODE, GLOB_ALL, HOMEPAGE_URL, INFERRED, kOrigTag, kTag, METABLOCK_RE, SUPPORT_URL, TL_AWAIT,
@@ -8,13 +8,15 @@ import {
 import { formatDate } from '@/common/date';
 import { mapEntry } from '@/common/object';
 import defaults, { kScriptTemplate } from '@/common/options-defaults';
+import broadcast from './broadcast';
 import { addOwnCommands, commands } from './init';
 import { getOption, hookOptionsInit } from './options';
 import storage, { S_MOD_PRE, S_SCRIPT_PRE } from './storage';
 import { injectableRe } from './tabs';
 
 addOwnCommands({
-  async NewScript(tabId) {
+  async NewScript({ code, tabId }) {
+    if (code) return newScriptFromCode(code);
     const tab = tabId >= 0 && await getTab(tabId) || {};
     const tabUrl = tab.url;
     const url = injectableRe.test(tabUrl) && `${tabUrl.split(/[#?]/)[0]}*`;
@@ -152,6 +154,7 @@ export function getDefaultCustom() {
   };
 }
 
+/** @return {VMScript & { code?: string }} */
 export function newScript(data) {
   const state = {
     url: GLOB_ALL,
@@ -164,7 +167,14 @@ export function newScript(data) {
       : format ? formatDate(format)
         : new Date().toLocaleString()
   ));
-  const script = {
+  const script = newScriptFromCode(code);
+  if (data) script.code = code;
+  return script;
+}
+
+/** @return {VMScript} */
+function newScriptFromCode(code) {
+  return {
     custom: getDefaultCustom(),
     config: {
       enabled: 1,
@@ -173,7 +183,6 @@ export function newScript(data) {
     meta: parseMeta(code, { retDefault: true }),
     props: {},
   };
-  return { script, code };
 }
 
 export function getNameURI(script) {
@@ -232,16 +241,16 @@ function inferScriptHome(script) {
  * @returns {string | undefined}
  */
 function inferScriptSupportUrl(script, home = getScriptHome(script)) {
-  let u = home && home.match(re`/
-    ^https:\/\/(?:
-      (?:
-        (greas|sleaz)yfork\.(?:org|cc)(?:\/(?!scripts)[^/]+)? |
+  let u = home && home.match(regex('i')`
+    ^https://(
+      (
+        (?<GF>greas|sleaz)yfork\.(org|cc)(/(?!scripts)[^\/]+)? |
         openuserjs\.org
-      )(?=\/scripts\/) |
+      )(?=/scripts/) |
       github\.com
-    )\/[^/]+\/[^/]+/x`);
+    )/[^\/]+/[^\/]+`);
   if (u) {
-    return `${u[0]}/${u[1] ? 'feedback' : 'issues'}`;
+    return `${u[0]}/${u.groups.GF ? 'feedback' : 'issues'}`;
   }
 }
 
@@ -265,7 +274,7 @@ export function updateVisitedTime(arr, isIds) {
     if (!isIds) v = v.id;
     scriptSiteVisited[v] = toBroadcast[v] = toWrite[S_MOD_PRE + v] = now;
   }
-  sendCmd('Visited', toBroadcast);
+  broadcast('Visited', toBroadcast);
   storage.api.set(toWrite);
 }
 

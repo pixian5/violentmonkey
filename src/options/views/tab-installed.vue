@@ -1,6 +1,7 @@
 <template>
   <div class="tab-installed" ref="scroller">
-    <div v-if="store.canRenderScripts">
+    <div v-if="store.canRenderScripts"
+         v-show="!store.title /* edit::onActivated + onDeactivated */">
       <header class="flex">
         <div v-if="!showRecycle">
           <div class="btn-group">
@@ -59,22 +60,6 @@
           <div class="ml-2" v-text="i18n('headerRecycleBin')" :data-size="state.size" />
         </Tooltip>
         <div>
-          <div class="sorter flex center-items mx-1"
-               :class="{ 'btn-ghost': collapseSorter }">
-            <Tooltip align="start"
-                     :content="i18n('sortOrder').trim() + (collapseSorter ? ' ' + (currentSort.text || '') : '')">
-              <component :is="currentSort.icon || IconSort"/>
-            </Tooltip>
-            <select :value="filters.sort" @change="handleOrderChange" class="h-100">
-              <option
-                v-for="({text, title}, name) in sortModes"
-                v-text="text"
-                :title
-                :key="name"
-                :value="name">
-              </option>
-            </select>
-          </div>
           <!-- form and id are required for the built-in autocomplete using entered values -->
           <form class="filter-search hidden-xs" @submit.prevent>
             <label>
@@ -100,6 +85,22 @@
               </div>
             </template>
           </Dropdown>
+          <div class="sorter flex center-items mx-1"
+               :class="{ 'btn-ghost': collapseSorter }">
+            <Tooltip align="end"
+                     :content="i18n('sortOrder').trim() + (collapseSorter ? ' ' + (currentSort.text || '') : '')">
+              <component :is="currentSort.icon || IconSort"/>
+            </Tooltip>
+            <select :value="filters.sort" @change="handleOrderChange" class="h-100">
+              <option
+                v-for="({text, title}, name) in sortModes"
+                v-text="text"
+                :title
+                :key="name"
+                :value="name">
+              </option>
+            </select>
+          </div>
           <Dropdown align="right" class="settings">
             <Tooltip :content="i18n('labelSettings')" placement="bottom" align="end">
               <a class="btn-ghost" tabindex="0">
@@ -165,6 +166,7 @@
       <KeepAlive :key="store.route.hash" :max="5">
       <edit
         v-if="state.script"
+        :dirty="state.dirty"
         :initial="state.script"
         :initial-code="state.code"
         :read-only="!!state.script.config.removed"
@@ -179,7 +181,7 @@
 import { computed, reactive, nextTick, onMounted, watch, ref, onBeforeUnmount } from 'vue';
 import Dropdown from 'vueleton/lib/dropdown';
 import Tooltip from 'vueleton/lib/tooltip';
-import { i18n, sendCmdDirectly, debounce, ensureArray, trueJoin, formatByteLength } from '@/common';
+import { i18n, sendCmdDirectly, debounce, ensureArray, trueJoin, formatByteLength, readBlob } from '@/common';
 import { INFERRED } from '@/common/consts';
 import handlers from '@/common/handlers';
 import options from '@/common/options';
@@ -188,6 +190,7 @@ import { forEachKey } from '@/common/object';
 import { setRoute, lastRoute } from '@/common/router';
 import { keyboardService, handleTabNavigation, kbdTypable, kbdNavigatable } from '@/common/keyboard';
 import { loadData } from '@/options';
+import { TAB_SETTINGS } from '@/common/safe-globals'; // added as a banner but Vue needs an import
 import { EXTERNAL_LINK_PROPS, getActiveElement, isTouch, showConfirmation, showMessage, vFocus } from '@/common/ui';
 import Icon from '@/common/ui/icon';
 import IconAlpha from '~icons/mdi/sort-alphabetical-ascending';
@@ -213,9 +216,12 @@ import toggleDragging from '../utils/dragging';
 import ScriptItem from './script-item';
 import Edit from './edit';
 
+const handleNewScript = () => handleEditScript('_new');
 const NEW_LINKS = [
   [i18n('buttonNew'),
-    { tabIndex: 0, onclick: () => handleEditScript('_new') }],
+    { tabIndex: 0, onclick: handleNewScript }],
+  [i18n('buttonNewFromFile'),
+    { tabIndex: 0, onclick: handleNewScriptFromFile }],
   [i18n('installFrom', 'OpenUserJS'),
     { href: 'https://openuserjs.org/', ...EXTERNAL_LINK_PROPS }],
   [i18n('installFrom', 'GreasyFork'),
@@ -235,7 +241,9 @@ const cmpName = (a, b) => collator.compare(a.$cache.lowerName, b.$cache.lowerNam
 const sortModes = [
   ['exec', i18n('filterExecutionOrder'), IconSort, IconSortDown],
   ['alpha', i18n('filterAlphabeticalOrder'), IconAlpha, IconAlphaDown, cmpName],
-  ['author', i18n('labelAuthor').replace(/\W+/, '').toLowerCase(), IconUser, IconUserDown,
+  ['author',
+    i18n('labelAuthor').replace(/[\s:\u{A789}\u{FE13}\u{FE55}\u{FF1A}]+/u, '').toLowerCase(),
+    IconUser, IconUserDown,
     (a, b) => collator.compare(a.meta.author || '', b.meta.author || '') || cmpName(a, b)],
   [UPDATE, i18n('filterLastUpdateOrder'), IconClock, IconClockDown,
     (a, b) => (+b.props.lastUpdated || 0) - (+a.props.lastUpdated || 0)],
@@ -302,6 +310,8 @@ let step = 0;
 let columnsForTableMode = [];
 let columnsForCardsMode = [];
 let scrollTop1, scrollTop2;
+
+let newScriptCode;
 
 const $menuNew = ref();
 const isEmpty = ref();
@@ -418,14 +428,14 @@ async function refreshUI() {
 }
 function sortScripts(scripts) {
   const { compare, reversed } = currentSort.value;
-  if (compare) {
-    const searching = state.search.rules.length;
-    const enabledFirst = filters.showEnabledFirst;
+  const searching = state.search.rules.length;
+  const enabledFirst = filters.showEnabledFirst;
+  if (compare || enabledFirst || searching) {
     scripts.sort(!enabledFirst && !searching && !reversed
       ? compare
       : (a, b) => enabledFirst && (b.config.enabled - a.config.enabled)
         || searching && (b.$cache.show - a.$cache.show)
-        || (reversed ? compare(b, a) : compare(a, b)),
+        || compare && (reversed ? compare(b, a) : compare(a, b)),
     );
   }
   sortedScripts.value = scripts;
@@ -455,8 +465,31 @@ async function handleInstallFromURL() {
       await sendCmdDirectly('ConfirmInstall', { url });
     }
   } catch (err) {
-    showMessage({ text: err.message || err });
+    showErrorMessage(err);
   }
+}
+function handleNewScriptFromFile() {
+  /** @type {HTMLInputElement} */
+  const el = document.createElement('input');
+  el.type = 'file';
+  el.accept = 'application/javascript,text/javascript,text/plain,.js';
+  el.style = 'display:none !important';
+  document.body.appendChild(el);
+  el.onchange = async () => {
+    if (el.value) {
+      try {
+        newScriptCode = await readBlob(el.files[0], 'text');
+        handleNewScript();
+      } catch (err) {
+        showErrorMessage(err);
+      }
+    }
+    el.remove();
+  };
+  el.click();
+}
+function showErrorMessage(err) {
+  showMessage({ text: err.message || err });
 }
 async function moveScript(from, to) {
   if (from === to) return;
@@ -488,8 +521,12 @@ function handleEditScript(id) {
 }
 async function onHashChange() {
   const [tab, id, cacheId] = store.route.paths;
-  const newData = id === '_new' && await sendCmdDirectly('NewScript', +cacheId);
-  const script = newData ? newData.script : +id && getCurrentList().find(s => s.props.id === +id);
+  if (__.MV3 && id) store.busyId = id;
+  const _new = id === '_new' && await sendCmdDirectly('NewScript', {
+    code: newScriptCode,
+    tabId: +cacheId,
+  });
+  const script = _new || +id && getCurrentList().find(s => s.props.id === +id);
   const scrollElem1 = scroller.value;
   const scrollElem2 = document.scrollingElement; // for compact layout
   if (script && !state.script) { // going into editor
@@ -497,10 +534,14 @@ async function onHashChange() {
     scrollTop2 = scrollElem2[kScrollTop];
   }
   if (script) {
-    state.code = newData ? newData.code : await sendCmdDirectly('GetScriptCode', id);
+    state.code = newScriptCode || _new.code || await sendCmdDirectly('GetScriptCode', id);
+    state.dirty = !!newScriptCode;
+    if (_new) delete script.code;
     state.script = script;
-    return;
   }
+  newScriptCode = '';
+  if (__.MV3 && id) store.busyId = 0;
+  if (script) return;
   // Strip the invalid id from the URL so |App| can render the aside,
   // which was hidden to avoid flicker on initial page load directly into the editor.
   if (id) setRoute(tab, true);

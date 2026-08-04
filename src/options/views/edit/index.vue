@@ -115,6 +115,7 @@ import { externalEditorInfoUrl, focusMe, getActiveElement, showMessage } from '@
 import { keyboardService } from '@/common/keyboard';
 import options from '@/common/options';
 import { getUnloadSentry } from '@/common/router';
+import { isGmStorageGranted } from '@/common/script';
 import { EXTERNAL_LINK_PROPS } from '@/common/ui';
 import {
   kDownloadURL, kExclude, kExcludeMatch, kHomepageURL, kIcon, kInclude, kMatch, kName, kOrigExclude, kOrigExcludeMatch,
@@ -186,11 +187,11 @@ let $codeComp;
 let disposeList;
 let savedCopy;
 let shouldSavePositionOnSave;
-let toggleUnloadSentry;
 let portId, depsDone, depsTotal;
 
 const emit = defineEmits(['close']);
 const props = defineProps({
+  dirty: Boolean,
   /** @type {VMScript} */
   initial: Object,
   initialCode: String,
@@ -203,7 +204,7 @@ const nav = ref('code');
 const canSave = ref(false);
 const script = ref();
 const code = ref('');
-const codeDirty = ref(false);
+const codeDirty = ref(props.dirty);
 const commands = {
   save,
   close,
@@ -248,7 +249,7 @@ const navItems = computed(() => {
   return {
     code: i18n('editNavCode'),
     settings: i18n('editNavSettings'),
-    ...id && {
+    ...id && (size || isGmStorageGranted(meta)) && {
       values: i18n('editNavValues') + (size ? ` (${formatByteLength(size)})` : ''),
     },
     ...(req || res) && { [EXTERNALS]: [req, res]::trueJoin('/') },
@@ -256,6 +257,7 @@ const navItems = computed(() => {
   };
 });
 const scriptName = computed(() => (store.title = getScriptName(script.value)));
+const toggleUnloadSentry = getUnloadSentry(null, () => CM.focus());
 
 watch(nav, async val => {
   await nextTick();
@@ -293,7 +295,6 @@ watch(script, onScript);
 onMounted(() => {
   $codeComp = $code.value;
   CM = $codeComp.cm;
-  toggleUnloadSentry = getUnloadSentry(null, () => CM.focus());
   if (browserWindows && options.get('editorWindow') && global.history.length === 1) {
     browserWindows.getCurrent({ populate: true }).then(setupSavePosition);
   }
@@ -309,7 +310,6 @@ onMounted(() => {
 });
 
 onActivated(() => {
-  document.body.classList.add('edit-open');
   disposeList = [
     keyboardService.register('a-pageup', switchPrevPanel),
     keyboardService.register('a-pagedown', switchNextPanel),
@@ -321,7 +321,6 @@ onActivated(() => {
 });
 
 onDeactivated(() => {
-  document.body.classList.remove('edit-open');
   store.tags =
   store.title = null;
   toggleUnloadSentry(false);

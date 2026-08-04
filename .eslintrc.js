@@ -123,6 +123,7 @@ function makeOverrides() {
     PAGE_MODE_HANDSHAKE: false,
     VAULT_ID: false,
   };
+  GLOBALS_SHARED.IS_FIREFOX = // added in webpack's DefinePlugin
   GLOBALS_SHARED.__ = GLOBALS_INJECTED.__ = false;
   function getGlobals(path) {
     const res = {};
@@ -171,10 +172,9 @@ function makeOverrides() {
     GLOBALS_COMMON: {
       ...GLOBALS_SHARED,
       ...getGlobals('common'),
-      re: false, // transform-modern-regexp with useRe option
+      regex: false, // babel-plugin-transform-regex
     },
     GLOBALS_CONTENT: {
-      INIT_FUNC_NAME: false,
       ...GLOBALS_SHARED,
       ...getGlobals('injected/content'),
       ...GLOBALS_INJECTED,
@@ -188,7 +188,7 @@ function makeOverrides() {
     INJECTED_RULES: {
       'no-restricted-imports': [
         'error', {
-          patterns: ['*/common', '*/common/*'],
+          patterns: ['*/common', '*/common/*', '!*/common/consts'],
         }
       ],
       'no-restricted-syntax': ['error', ...restrictedSyntax],

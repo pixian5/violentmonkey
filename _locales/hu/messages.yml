@@ -266,6 +266,9 @@ fileInstallBlocked:
     a "Fájl URL-ek elérése"-t a Violentmonkey részleteiben a böngésző
     'Kiegészítők' oldalán. Ez veszélyes, mert így bármelyik szkript elérhet
     bármilyen helyi fájlt.
+fileInstallBlockedFF:
+  description: Text in the installer when a local file is dropped into Firefox window.
+  message: ''
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: ábécésorrend szerint
@@ -318,7 +321,7 @@ headerRecycleBin:
   message: Kuka
 helpForLocalFile:
   description: Label of the checkbox.
-  message: Az oldalra húzott helyi szkriptekre vonatkozó instrukciók mutatása
+  message: ''
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: ''
@@ -459,22 +462,45 @@ labelExportScriptData:
 labelExposeStatus:
   description: Option in advanced settings.
   message: 'Telepített verzió felfedése userscript katalógus oldalakon: $1'
-labelFastFirefoxInject:
+labelFastInject:
   description: (`$1` will be shown as `page`) Option in Advanced settings.
-  message: Alternatív $1 módszer Firefox-ban
-labelFastFirefoxInjectHint:
+  message: Alternatív $1 módszer
+labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
-    Egy alternatív injektálási módszer <document-start> szkriptekhez Firefox
-    59-től, ami gyorsabb, mint az alapértelmezett. A "Szinkron page módhoz"
-    hasonlóan ez is megnöveli a memória használatot, így ha a szkripted enélkül
-    is megfelelően fut, akkor nem tanácsos ezt használni.
+    Egy alternatív injektálási módszer <document-start> szkriptekhez, ami
+    gyorsabb, mint az alapértelmezett. A "Szinkron page módhoz" hasonlóan ez is
+    megnöveli a memória használatot, így ha a szkripted enélkül is megfelelően
+    fut, akkor nem tanácsos ezt használni.
 labelFeedback:
   description: Label of link to feedback page.
   message: Visszajelzés
+labelFirefoxPatchCsp:
+  description: Option in Advanced settings.
+  message: ''
+labelFirefoxPatchCspHint:
+  description: >-
+    (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
+    in Advanced settings.
+  message: ''
+labelFirefoxPatchCspPopup:
+  description: >-
+    ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
+    in the popup's extras menu.
+  message: ''
 labelGeneral:
   description: Label for general settings.
   message: Általános
+  touched: false
+labelGmDownloadViaApi:
+  description: Option in Advanced settings to use the browser download API for GM_download.
+  message: ''
+labelGmDownloadViaApiHint:
+  description: Tooltip for the browser download option in Advanced settings.
+  message: ''
+labelGrantPermission:
+  description: Button to request the API permission.
+  message: ''
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: Segíts a fordításban!

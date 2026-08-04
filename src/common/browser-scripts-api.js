@@ -1,14 +1,6 @@
-import { getActiveTab } from '@/common';
-
 export const INJECTED_DATA_ID = '1000';
 export const INJECTED_API_ID = '1001';
-export const ALLOW_USERSCRIPTS = 'Please enable "Allow User Scripts" for Violentmonkey in chrome://extensions';
 export const extensionDetailsUrl = __.MV3 && `chrome://extensions/?id=${chrome.runtime.id}`;
-
-export const userScriptsAllowed = () => {
-  try { return !!chrome.userScripts.register; }
-  catch { /* older versions of Chrome threw on access if no enabled */ }
-};
 
 export const executeScript = __.MV3
   ? async (tabId, code, runAt, frameId) => (await chrome.userScripts.execute({
@@ -23,16 +15,18 @@ export const executeScript = __.MV3
   }))[0];
 
 export const registerInjector = async (isInstall) => {
+  let api;
   try {
+    api = chrome.userScripts;
     if (isInstall
-      || !(await chrome.userScripts.getScripts({ ids: [INJECTED_API_ID] }))[0]?.js[0].file
+      || !(await api.getScripts({ ids: [INJECTED_API_ID] }))[0]?.js[0].file
     ) await Promise.all([
-      chrome.userScripts.configureWorld({
+      api.configureWorld({
         csp: "script-src 'self' 'unsafe-inline' 'unsafe-eval';" +
           "style-src * 'unsafe-inline' data: blob:",
         messaging: true,
       }),
-      chrome.userScripts.unregister().then(() => chrome.userScripts.register([{
+      api.unregister().then(() => api.register([{
         id: INJECTED_API_ID,
         runAt: 'document_start',
         allFrames: true,
@@ -41,20 +35,14 @@ export const registerInjector = async (isInstall) => {
       }])),
     ]);
   } catch (err) {
-    throw !chrome.userScripts || err.message.includes("'userScripts.getScripts' is not available")
-      ? ALLOW_USERSCRIPTS
-      : err;
-  }
-};
-
-export const openExtensionDetails = async () => {
-  const url = extensionDetailsUrl;
-  const tab = await getActiveTab();
-  if (tab?.url?.split('://')[1] !== url.split('://')[1]) {
-    chrome.tabs.create({
-      url,
-      index: tab?.index + 1,
-      openerTabId: tab?.id,
-    });
+    if (!api || /'userScripts\.\w+' is not available|No changes to loaded/.test(err.message)) {
+      err = `Please enable ${ // eslint-disable-line no-ex-assign
+        +navigator.userAgent.match(/chrom\D+(\d{3,})/i)?.[1] >= 138
+          ? '"Allow User Scripts" in details for Violentmonkey'
+          : '"Developer Mode"'
+      } in chrome://extensions`;
+    }
+    if (isInstall) console.error(err);
+    return err;
   }
 };

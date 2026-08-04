@@ -110,7 +110,7 @@ buttonSyncPushOnce:
   message: Uzağa bir kez "push"
 buttonUndo:
   description: Button to undo removement of a script.
-  message: Geri Al
+  message: Geri al
 buttonUpdate:
   description: Button to update a script.
   message: Güncelle
@@ -192,7 +192,7 @@ descScriptTemplate:
     <{{date:YYYY-MM-DD}}>).
 disabledScriptsGroup:
   description: 'Used as "Disabled scripts: group"'
-  message: grupla
+  message: gruplandır
 disabledScriptsHide:
   description: 'Used as "Disabled scripts: hide"'
   message: gizle
@@ -247,7 +247,7 @@ editValueAllHint:
   message: Tüm betiğin değer depolama alanını göster/düzenle
 extDescription:
   description: Description for this extension, will be displayed in web store
-  message: Birçok tarayıcıyı destekleyen açık kaynaklı bir kullanıcı betiği yöneticisi
+  message: Birçok tarayıcıyı destekleyen açık kaynaklı kullanıcı betiği yöneticisi
 extName:
   description: Name of this extension.
   message: Violentmonkey
@@ -279,6 +279,11 @@ fileInstallBlocked:
     “Dosya URL’lerine erişime izin ver” seçeneğini etkinleştirin. Bu, herhangi
     bir kullanıcı betiğinin herhangi bir yerel dosyayı okuyabilmesi nedeniyle
     tehlikelidir.
+fileInstallBlockedFF:
+  description: Text in the installer when a local file is dropped into Firefox window.
+  message: >-
+    about:addons sayfasına girin, "Violentmonkey"e tıklayın, "İzinler ve
+    veriler"e tıklayın, "Bilgisayarınızdaki dosyalara erişme"yi etkinleştirin.
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: alfabetik
@@ -333,7 +338,7 @@ headerRecycleBin:
   message: Geri Dönüşüm Kutusu
 helpForLocalFile:
   description: Label of the checkbox.
-  message: Sürükle ve bırak yöntemiyle eklenen yerel betikler için talimatları göster
+  message: Yerel bir betik yüklenemediğinde yardım bilgilerini göster
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: $1 adet eşleşen betik için
@@ -481,23 +486,52 @@ labelExportScriptData:
 labelExposeStatus:
   description: Option in advanced settings.
   message: 'Kullanıcı betik kataloğu sitelerinde yüklü sürümü göster: $1'
-labelFastFirefoxInject:
+labelFastInject:
   description: (`$1` will be shown as `page`) Option in Advanced settings.
-  message: Firefox'ta alternatif $1 modu
-labelFastFirefoxInjectHint:
+  message: Alternatif $1 modu
+labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
-    <document-start> betikleri için Firefox 59'dan beri kullanılabilen
-    alternatif bir enjeksiyon yöntemi. Varsayılan moddan daha hızlıdır. "Eş
-    zamanlı sayfa modu" ile benzer şekilde bellek tüketimini artırır. Bu
-    nedenle, betikleriniz bu seçenek olmadan düzgün çalışıyorsa devre dışı
-    bırakmayı düşünebilirsiniz.
+    <document-start> betikler için varsayılan moddan daha hızlı olan alternatif
+    bir yükleme yöntemi. “Senkron sayfa modu”na benzer şekilde bu da bellek
+    tüketimini artırır; bu nedenle, betikleriniz bu seçenek olmadan düzgün
+    çalışıyorsa, bu özelliği devre dışı bırakmak isteyebilirsiniz.
 labelFeedback:
   description: Label of link to feedback page.
   message: Geri bildirim
+labelFirefoxPatchCsp:
+  description: Option in Advanced settings.
+  message: Firefox'ta CSP'yi atla
+labelFirefoxPatchCspHint:
+  description: >-
+    (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
+    in Advanced settings.
+  message: >-
+    Web sayfalarının CSP’sine, yalnızca Violentmonkey’in $1 enjeksiyon modunda
+    betikleri çalıştırmak için kullanabileceği rastgele bir değer ekler; aksi
+    takdirde betiklerin $2 kullanacak şekilde düzenlenmesi gerekir.
+labelFirefoxPatchCspPopup:
+  description: >-
+    ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
+    in the popup's extras menu.
+  message: >-
+    Yalıtılmış $1 modu işlevselliği kısıtlayabilir; seçenekler bölümündeki “$2”
+    seçeneğine bakınız.
 labelGeneral:
   description: Label for general settings.
   message: Genel
+  touched: false
+labelGmDownloadViaApi:
+  description: Option in Advanced settings to use the browser download API for GM_download.
+  message: Tarayıcının indirme API'sini kullan
+labelGmDownloadViaApiHint:
+  description: Tooltip for the browser download option in Advanced settings.
+  message: >-
+    Betiklerin, indirme dizininizdeki alt klasörlere dosya kaydetmesine olanak
+    tanır ve indirme ilerlemesini tarayıcının indirme çubuğunda gösterir.
+labelGrantPermission:
+  description: Button to request the API permission.
+  message: İzin ver
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: Çeviriye yardımcı olun

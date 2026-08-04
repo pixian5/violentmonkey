@@ -1,14 +1,16 @@
 import {
   dataUri2text, getScriptHome, getScriptName, getScriptPrettyUrl, getScriptRunAt, getScriptsTags,
-  getScriptUpdateUrl, i18n, ignoreChromeErrors, isDataUri, isRemote, isValidHttpUrl, makePause,
-  sendCmd, trueJoin,
+  getScriptUpdateUrl, i18n, ignoreChromeErrors, isDataUri, isRemote, isValidHttpUrl,
+  makePause, trueJoin,
 } from '@/common';
 import {
-  CACHE_KEYS, FETCH_OPTS, INFERRED, kTag, PROMISE, REQ_KEYS, TIMEOUT_24HOURS, TIMEOUT_WEEK,
-  TL_AWAIT, VALUE_IDS,
+  CACHE_KEYS, FETCH_OPTS, INFERRED, kDownloads, kTag, PROMISE, REQ_KEYS, TIMEOUT_24HOURS,
+  TIMEOUT_WEEK, TL_AWAIT, VALUE_IDS,
 } from '@/common/consts';
 import { deepSize, forEachEntry, forEachKey, forEachValue } from '@/common/object';
+import { isGmStorageGranted } from '@/common/script';
 import pluginEvents from '../plugin/events';
+import broadcast from './broadcast';
 import {
   aliveScripts, getDefaultCustom, getNameURI, inferScriptProps, newScript, parseMeta,
   removedScripts, scriptMap, scriptSiteVisited,
@@ -18,8 +20,9 @@ import { getImageData } from './icon';
 import { addOwnCommands, addPublicCommands, commands, resolveInit } from './init';
 import { installedOver, NEW_INSTALL } from './on-installed';
 import patchDB from './patch-db';
+import { permissionDownloads } from './permissions';
 import { initOptions, kVersion, setOption } from './options';
-import sessionData from './session-data';
+import sessionData, { flushSession, kScriptSizes, scriptSizes } from './session-data';
 import storage, {
   S_CACHE, S_CODE, S_REQUIRE, S_SCRIPT, S_VALUE,
   S_CACHE_PRE, S_CODE_PRE, S_MOD_PRE, S_REQUIRE_PRE, S_SCRIPT_PRE, S_VALUE_PRE,
@@ -33,8 +36,6 @@ let maxScriptId = 0;
 let maxScriptPosition = 0;
 /** @type {Map<string,number>} */
 export let dbKeys = new Map(); // 1: exists, 0: known to be absent
-/** @type {{ [url:string]: number }} */
-export let scriptSizes = {};
 /** Ensuring slow icons don't prevent installation/update */
 const ICON_TIMEOUT = 1000;
 export const kTryVacuuming = 'Try vacuuming database in options.';
@@ -142,8 +143,8 @@ function resetScriptState() {
   dbKeys.clear();
   aliveScripts.length = 0;
   removedScripts.length = 0;
+  scriptSizes = {}; // eslint-disable-line no-import-assign
   for (const key in scriptMap) delete scriptMap[key];
-  for (const key in scriptSizes) delete scriptSizes[key];
   for (const key in scriptSiteVisited) delete scriptSiteVisited[key];
 }
 
@@ -199,8 +200,10 @@ function applyScriptData(data) {
   });
 }
 
-export async function initializeDatabase() {
-  resetScriptState();
+export async function initializeDatabase(reset) {
+  if (reset) {
+    resetScriptState();
+  }
   /** @type {string[]} */
   let keys;
   let [allKeys, data] = await Promise.all([
@@ -218,23 +221,21 @@ export async function initializeDatabase() {
   if (installedOver === NEW_INSTALL) await patchDB();
   if (installedOver) storage.api.set({ [kVersion]: __.VM_VER });
   applyScriptData(data);
-  initOptions(data, installedOver, installedOver !== NEW_INSTALL);
+  initOptions(data, installedOver, installedOver && installedOver !== NEW_INSTALL);
   if (__.DEBUG) {
     console.info('store:', {
       aliveScripts, removedScripts, maxScriptId, maxScriptPosition, scriptMap, scriptSizes,
     });
   }
-  sortScripts();
-  if (!__.MV3 || !sessionData.init && chrome.storage.session.set({ init: 1 })) {
-    setTimeout(async () => {
-      if (allKeys?.length) {
-        const set = new Set(keys); // much faster lookup
-        const data2 = await storage.api.get(allKeys.filter(k => !set.has(k)));
-        Object.assign(data, data2);
-      }
-      vacuum(data);
-    }, 100);
+  if (!__.MV3 || !sessionData.init) {
+    if (allKeys?.length) {
+      const set = new Set(keys); // much faster lookup
+      const data2 = await storage.api.get(allKeys.filter(k => !set.has(k)));
+      Object.assign(data, data2);
+    }
+    vacuum(data); // also calculates `scriptSizes`
     checkRemove();
+    sortScripts();
   }
   if (!__.MV3) {
     setInterval(checkRemove, TIMEOUT_24HOURS);
@@ -323,10 +324,12 @@ export async function normalizePosition() {
 
 /** @return {Promise<Boolean>} */
 export async function sortScripts() {
-  aliveScripts.sort((a, b) => getInt(a.props.position) - getInt(b.props.position));
-  const changed = await normalizePosition();
-  sendCmd('ScriptsUpdated', null);
-  return changed;
+  const old = [...aliveScripts];
+  aliveScripts.sort((a, b) => (a.props.position || 0) - (b.props.position || 0));
+  if (await normalizePosition() || old.some((val, i) => val !== aliveScripts[i])) {
+    broadcast('ScriptsUpdated');
+    return true;
+  }
 }
 
 /** @return {?VMScript} */
@@ -360,7 +363,6 @@ const makeEnv = () => ({
   [RUN_AT]: {},
   [SCRIPTS]: [],
 });
-const GMVALUES_RE = /^GM[_.](listValues|([gs]et|delete)Values?)$/;
 const STORAGE_ROUTES = {
   [S_CACHE]: CACHE_KEYS,
   [S_CODE]: IDS,
@@ -419,7 +421,7 @@ export function getScriptsByURL(url, isTop, errors, prevIds) {
     const { depsMap } = env;
     env[IDS].push(id);
     env[RUN_AT][id] = runAt;
-    if (meta.grant.some(GMVALUES_RE.test, GMVALUES_RE)) {
+    if (isGmStorageGranted(meta)) {
       env[VALUE_IDS].push(id);
     }
     if (!clipboardChecked) {
@@ -541,6 +543,7 @@ export async function getData({ id, ids, sizes }) {
     ? getScriptsByIdsOrAll(ids).filter(Boolean)
     : getScriptsByIdsOrAll();
   scripts.forEach(inferScriptProps);
+  res[kDownloads] = permissionDownloads;
   res[SCRIPTS] = scripts;
   if (sizes) res.sizes = getSizes(ids);
   if (!id) res.cache = await getIconCache(scripts);
@@ -625,7 +628,7 @@ export async function removeScripts(ids) {
     removedScripts.length = newLen; // live scripts were moved to the beginning
     await storage.api.remove(idsToRemove);
     vacuum();
-    return sendCmd('RemoveScripts', ids);
+    return broadcast('RemoveScripts', ids);
   }
 }
 
@@ -638,18 +641,6 @@ export function checkRemove({ force } = {}) {
   return removeScripts(ids);
 }
 
-/** @return {string} */
-const getUUID = __.MV3 || crypto.randomUUID ? crypto.randomUUID.bind(crypto) : () => {
-  const rnd = new Uint16Array(8);
-  crypto.getRandomValues(rnd);
-  // xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx
-  // We're using UUIDv4 variant 1 so N=4 and M=8
-  // See format_uuid_v3or5 in https://tools.ietf.org/rfc/rfc4122.txt
-  rnd[3] = rnd[3] & 0x0FFF | 0x4000; // eslint-disable-line no-bitwise
-  rnd[4] = rnd[4] & 0x3FFF | 0x8000; // eslint-disable-line no-bitwise
-  return '01-2-3-4-567'.replace(/\d/g, i => (rnd[i] + 0x1_0000).toString(16).slice(-4));
-};
-
 /**
  * @param {number} id
  * @param {DeepPartial<VMScript>} data
@@ -661,7 +652,7 @@ export async function updateScriptInfo(id, data) {
   }
   await Promise.all([
     storage.api.set({ [S_SCRIPT_PRE + id]: script }),
-    sendCmd('UpdateScript', { where: { id }, update: script }),
+    broadcast('UpdateScript', { where: { id }, update: script }),
   ]);
 }
 
@@ -715,7 +706,7 @@ export async function parseScript(src) {
     script = oldScript;
     id = script.props.id;
   } else {
-    ({ script } = newScript());
+    script = newScript();
     maxScriptId++;
     id = script.props.id = maxScriptId;
     result.isNew = true;
@@ -732,7 +723,7 @@ export async function parseScript(src) {
     delete script[INFERRED];
   }
   props.lastModified = now;
-  props.uuid = props.uuid || getUUID();
+  props.uuid = props.uuid || crypto.randomUUID();
   // Overwriting inner data by `src`, deleting keys for which `src` specifies `null`
   for (const key of ['config', 'custom', 'props']) {
     const dst = script[key];
@@ -776,7 +767,7 @@ export async function parseScript(src) {
   Object.assign(update, script, srcUpdate);
   result.where = { id };
   result[S_CODE] = src[S_CODE];
-  sendCmd('UpdateScript', result);
+  broadcast('UpdateScript', result);
   pluginEvents.emit('scriptChanged', result);
   if (src.reloadTab) reloadTabForScript(script);
   return result;
@@ -887,7 +878,7 @@ export async function fetchResources(script, src) {
   const error = errors.map(formatHttpError)::trueJoin('\n');
   if (error) {
     let message = i18n('msgErrorFetchingResource');
-    sendCmd('UpdateScript', {
+    broadcast('UpdateScript', {
       update: { error, message },
       where: { id: getPropsId(script) },
     });
@@ -999,7 +990,8 @@ export async function vacuum(data) {
       status[key] = -1;
     }
   });
-  scriptSizes = sizes;
+  scriptSizes = sizes; // eslint-disable-line no-import-assign
+  if (__.MV3) flushSession(kScriptSizes, scriptSizes);
   getScriptsByIdsOrAll().forEach((script) => {
     const { meta, props } = script;
     const icon = script.custom.icon || meta.icon;

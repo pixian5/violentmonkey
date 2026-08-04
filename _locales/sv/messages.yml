@@ -270,6 +270,9 @@ fileInstallBlocked:
     och öppna den via http://localhost. <3> Aktivera "Tillåt åtkomst till
     filwebbadresser" i detaljer för Violentmonkey på sidan chrome://extensions.
     Detta är farligt eftersom alla användarskript kan läsa alla lokala filer.
+fileInstallBlockedFF:
+  description: Text in the installer when a local file is dropped into Firefox window.
+  message: ''
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: alfabetisk
@@ -324,7 +327,7 @@ headerRecycleBin:
   message: Papperskorg
 helpForLocalFile:
   description: Label of the checkbox.
-  message: Visa instruktionerna för drag och släpp för lokala skript
+  message: ''
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: för $1 matchande skript
@@ -465,22 +468,45 @@ labelExportScriptData:
 labelExposeStatus:
   description: Option in advanced settings.
   message: 'Visa installerad version på användarskriptkatalogsidor: $1'
-labelFastFirefoxInject:
+labelFastInject:
   description: (`$1` will be shown as `page`) Option in Advanced settings.
-  message: Alternativt $1-läge i Firefox
-labelFastFirefoxInjectHint:
+  message: Alternativt $1-läge
+labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
-    En alternativ injektionsmetod för <document-start> skript sedan Firefox 59,
-    snabbare än standardläget. På samma sätt som "Synkront sidläge" ökar det
-    också minnesförbrukningen, så du kanske vill inaktivera det om dina skript
+    En alternativ injektionsmetod för <document-start> skript, snabbare än
+    standardläget. På samma sätt som "Synkront sidläge" ökar det också
+    minnesförbrukningen, så du kanske vill inaktivera det om dina skript
     fungerar korrekt utan detta alternativ.
 labelFeedback:
   description: Label of link to feedback page.
   message: Återkoppling
+labelFirefoxPatchCsp:
+  description: Option in Advanced settings.
+  message: ''
+labelFirefoxPatchCspHint:
+  description: >-
+    (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
+    in Advanced settings.
+  message: ''
+labelFirefoxPatchCspPopup:
+  description: >-
+    ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
+    in the popup's extras menu.
+  message: ''
 labelGeneral:
   description: Label for general settings.
   message: Allmänt
+  touched: false
+labelGmDownloadViaApi:
+  description: Option in Advanced settings to use the browser download API for GM_download.
+  message: ''
+labelGmDownloadViaApiHint:
+  description: Tooltip for the browser download option in Advanced settings.
+  message: ''
+labelGrantPermission:
+  description: Button to request the API permission.
+  message: ''
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: Hjälp med översättning
