@@ -51,12 +51,26 @@ addPublicCommands({
       }
       sendTabCmd(tabId, 'HttpRequested', res, req.frame);
     };
-    const cbError = err => cb({
-      id,
-      [ERROR]: [err.message || `${err}`, err.name],
-      data: null,
-      type: ERROR,
-    });
+    const cbError = err => {
+      cb({
+        id,
+        [ERROR]: [err.message || `${err}`, err.name],
+        data: null,
+        type: ERROR,
+      });
+      cb({
+        id,
+        data: {
+          finalUrl: req.url,
+          [kResponse]: null,
+          [kResponseHeaders]: null,
+          readyState: 4,
+          status: 0,
+          statusText: '',
+        },
+        type: 'loadend',
+      });
+    };
     Object.defineProperties(req, { // non-enumerable props won't be messaged
       cb: {value: cb},
       cbError: {value: cbError},

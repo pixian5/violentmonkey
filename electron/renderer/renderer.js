@@ -93,6 +93,7 @@ function bindWebviewEvents() {
   });
 
   dom.browserView.addEventListener('new-window', event => {
+    event.preventDefault();
     window.vmShell.openBrowserWindow(event.url);
   });
 }

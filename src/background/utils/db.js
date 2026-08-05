@@ -263,19 +263,17 @@ function rebuildDbKeysFromAllKeys(allKeys) {
 
 async function rebuildScriptIndex() {
   let allKeys, data;
+  resetScriptState();
   if (getStorageKeys) {
     allKeys = await getStorageKeys();
     rebuildDbKeysFromAllKeys(allKeys);
-    const scriptPrefix = storage[S_SCRIPT].prefix;
-    const scriptKeys = allKeys.filter(key => key.startsWith(scriptPrefix));
-    data = await storage.api.get(scriptKeys);
+    data = await storage.api.get(allKeys);
   } else {
     data = await storage.api.get(null);
-    dbKeys.clear();
     Object.keys(data).forEach(key => dbKeys.set(key, 1));
   }
-  resetScriptState();
   applyScriptData(data);
+  await vacuum(data);
   await sortScripts();
   return { scripts: aliveScripts.length, removed: removedScripts.length };
 }

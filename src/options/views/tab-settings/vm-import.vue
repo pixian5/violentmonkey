@@ -33,7 +33,7 @@ import {
   kComment, kDownloadURL, kExclude, kInclude, kMatch, kOrigExclude, kOrigInclude, kOrigMatch, runInBatch, store,
   vmZipEntryName,
 } from '../../utils';
-import { onActivated, onMounted, reactive, ref } from 'vue';
+import { onActivated, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import SettingCheck from '@/common/ui/setting-check';
 
 const reports = reactive([]);
@@ -59,6 +59,7 @@ const isPlainObject = val => val && typeof val === 'object' && !Array.isArray(va
 const TM = 'Tampermonkey';
 
 let depsPortId;
+let removeDepsPortListener;
 let undoPort;
 
 onMounted(() => {
@@ -71,6 +72,7 @@ onMounted(() => {
     vmVer: process.env.VM_VER,
   });
 });
+onBeforeUnmount(() => removeDepsPortListener?.());
 onActivated(() => {
   if (++store.isEmpty === 2) {
     const btn = buttonImport.value;
@@ -376,9 +378,11 @@ async function doImportBackup(buf, zipName) {
   let now;
   let depsDone = 0;
   let depsTotal = 0;
-  depsPortId = getUniqId();
-  browser.runtime.onConnect.addListener(port => {
-    if (port.name !== depsPortId) return;
+  const portId = depsPortId = getUniqId();
+  removeDepsPortListener?.();
+  const onConnect = port => {
+    if (port.name !== portId) return;
+    removeDepsPortListener?.();
     port.onMessage.addListener(([url, done]) => {
       if (done) ++depsDone; else ++depsTotal;
       reports[1].name = i18n('msgLoadingDependency', [depsDone, depsTotal]);
@@ -390,7 +394,12 @@ async function doImportBackup(buf, zipName) {
       }
       reports[1].text = url;
     });
-  });
+  };
+  browser.runtime.onConnect.addListener(onConnect);
+  removeDepsPortListener = () => {
+    browser.runtime.onConnect.removeListener(onConnect);
+    removeDepsPortListener = null;
+  };
   if (!undoPort) {
     now = ' ⯈ ' + new Date().toLocaleTimeString();
     undoPort = browser.runtime.connect({ name: 'undoImport' });
@@ -549,7 +558,7 @@ async function doImportBackup(buf, zipName) {
   function zipTimeToDate(time) {
     return new Date(
       /*Y*/((time >> 25) & 0x7f) + 1980,
-      /*M*/(time >> 21) & 0x0f - 1,
+      /*M*/((time >> 21) & 0x0f) - 1,
       /*D*/(time >> 16) & 0x1f,
       /*h*/(time >> 11) & 0x1f,
       /*m*/(time >> 5) & 0x3f,

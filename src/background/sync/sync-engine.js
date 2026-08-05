@@ -247,6 +247,7 @@ let authTimer = null;
 
 export function openAuthPage(url, redirectUri) {
   unregister?.();
+  let tabId;
   let resolvePromise;
   const promise = new Promise((resolve) => {
     resolvePromise = resolve;
@@ -256,30 +257,38 @@ export function openAuthPage(url, redirectUri) {
     authResolve = null;
     resolvePromise(null);
   }, 300_000);
-  browser.tabs.create({ url }).then(({ id: tabId }) => {
-    const handler = (info) => {
-      browser.tabs.remove(tabId);
-      setTimeout(unregister, 0);
-      if (authResolve) {
-        clearTimeout(authTimer);
-        authResolve(info.url);
-        authResolve = null;
-      }
-      return { cancel: true };
-    };
-    unregister = () => {
-      browser.webRequest.onBeforeRequest.removeListener(handler);
-    };
-    redirectUri = redirectUri.replace(/:\d+/, '');
-    browser.webRequest.onBeforeRequest.addListener(
-      handler,
-      {
-        urls: [`${redirectUri}*`],
-        types: [kMainFrame, 'xmlhttprequest'],
-      },
-      ['blocking'],
-    );
-  });
+  const handler = (info) => {
+    if (info.tabId !== tabId) return;
+    browser.tabs.remove(tabId);
+    setTimeout(unregister, 0);
+    if (authResolve) {
+      clearTimeout(authTimer);
+      authResolve(info.url);
+      authResolve = null;
+    }
+    return { cancel: true };
+  };
+  unregister = () => {
+    browser.webRequest.onBeforeRequest.removeListener(handler);
+  };
+  redirectUri = redirectUri.replace(/:\d+/, '');
+  browser.webRequest.onBeforeRequest.addListener(
+    handler,
+    {
+      urls: [`${redirectUri}*`],
+      types: [kMainFrame, 'xmlhttprequest'],
+    },
+    ['blocking'],
+  );
+  browser.tabs.create({ url }).then(
+    ({ id }) => { tabId = id; },
+    () => {
+      unregister();
+      clearTimeout(authTimer);
+      authResolve = null;
+      resolvePromise(null);
+    },
+  );
   return promise;
 }
 

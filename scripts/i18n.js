@@ -87,7 +87,9 @@ class Locales {
   }
 
   async load() {
-    const langs = await fs.readdir(this.base);
+    const langs = (await fs.readdir(this.base, { withFileTypes: true }))
+    .filter(entry => entry.isDirectory())
+    .map(entry => entry.name);
     this.langs = langs;
     await Promise.all(langs.map(async lang => {
       const locale = new Locale(lang, this.base);

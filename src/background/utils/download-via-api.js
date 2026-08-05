@@ -3,6 +3,7 @@ import { kDownloads } from '@/common/consts';
 import { FORBIDDEN_HEADER_RE, requests } from './requests-core';
 import { downloads, flushSession } from './session-data';
 import { FIREFOX } from './ua';
+import { vetUrl } from './url';
 
 const reReferer = /^referer$/i; // allowed since Firefox 70
 const reUA = /^user-agent$/i; // allowed since Firefox 43
@@ -28,7 +29,7 @@ export default async function downloadViaApi(opts, events, id, req, src, fileNam
     headers: headers ? Object.entries(headers).map(objEntryToApiHeader).filter(Boolean) : undefined,
     method: opts.method || 'GET',
     saveAs: opts.saveAs,
-    url: opts.url,
+    url: vetUrl(opts.url, src.url, true),
   });
   if (isEmpty(downloads)) {
     browser.downloads.onChanged.addListener(onDownloadChanged);
@@ -46,7 +47,12 @@ async function onDownloadChanged({ id, error, state } = {}) {
     return;
   }
   if (error) {
-    req.cbe(error.current);
+    req.cb({
+      id: reqId,
+      [ERROR]: [error.current, 'DownloadError'],
+      data: null,
+      type: ERROR,
+    });
   }
   if (!state) {
     // nothing
