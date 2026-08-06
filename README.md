@@ -10,7 +10,7 @@ It works on browsers with [WebExtensions](https://developer.mozilla.org/en-US/Ad
 ## Current Build Scope
 
 The current deliverable is the browser extension only. The required build and
-verification commands are `pnpm ci` and `pnpm build:extension`, which produce
+verification commands are `pnpm run ci` and `pnpm build:extension`, which produce
 the extension in `dist/`. Do not run `macos:*`, `safari:*`, Electron packaging,
 or host-app installation unless a separate request explicitly asks for a host
 application.
@@ -38,7 +38,7 @@ This project is pinned to Yarn `1.22.22`.
 
 ``` sh
 # Install dependencies
-$ pnpm ci
+$ pnpm install
 
 # Watch and compile
 $ pnpm dev
