@@ -1,3 +1,5 @@
+// Optional host-app packaging only. Extension-only builds must use
+// `pnpm build:extension` and must not invoke this script.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';

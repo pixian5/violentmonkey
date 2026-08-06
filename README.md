@@ -7,6 +7,14 @@
 Violentmonkey provides userscripts support for browsers.
 It works on browsers with [WebExtensions](https://developer.mozilla.org/en-US/Add-ons/WebExtensions) support.
 
+## Current Build Scope
+
+The current deliverable is the browser extension only. The required build and
+verification commands are `pnpm ci` and `pnpm build:extension`, which produce
+the extension in `dist/`. Do not run `macos:*`, `safari:*`, Electron packaging,
+or host-app installation unless a separate request explicitly asks for a host
+application.
+
 More details can be found [here](https://violentmonkey.github.io/).
 
 Join our Discord server:
@@ -56,10 +64,11 @@ $ pnpm build
 $ pnpm build:selfHosted
 ```
 
-### macOS Desktop Build
+### Optional macOS Desktop Host
 
-This repository now includes an Electron-based macOS shell that loads the
-generated Violentmonkey extension into Chromium.
+This repository also contains an optional Electron-based macOS shell. It is
+not part of the extension-only build scope and does not need to be built,
+installed, or tested for normal extension work.
 
 ``` sh
 # Install dependencies
