@@ -2,7 +2,7 @@
 // @name         x自动点击第二次【转帖】按钮 + 精准喜欢
 // @match        *://x.com/*
 // @exclude      *://x.com/i/*
-// @version      4.0.1
+// @version      4.0.2
 // @description  自动确认转帖，并精准对该条帖子/评论点喜欢，不误触其他推文
 // @grant        none
 // @run-at       document-idle
@@ -11,7 +11,8 @@
 (function() {
     'use strict';
 
-    const VERSION = '4.0.1';
+    const VERSION = '4.0.2';
+    const PENDING_TWEET_TTL_MS = 8000;
     const RETWEET_CONFIRM_TESTIDS = ['retweetConfirm', 'retweetConfirmLegacy'];
     const RETWEET_CONFIRM_TEXTS = ['转帖', '轉帖', 'Repost', 'Retweet'];
     const RETWEET_BUTTON_SELECTOR = [
@@ -87,6 +88,10 @@
         console.log('📌 已记录转帖来源推文:', pendingTweet.tweetId || article);
     }
 
+    function isFreshPendingTweet(snapshot) {
+        return Boolean(snapshot && Date.now() - snapshot.capturedAt <= PENDING_TWEET_TTL_MS);
+    }
+
     function resolvePendingArticle(snapshot = pendingTweet) {
         if (!snapshot) return null;
         if (snapshot.article?.isConnected) return snapshot.article;
@@ -126,6 +131,61 @@
         return Array.from(candidates).find(isConfirmRetweetButton) || null;
     }
 
+    function handleConfirmButton(confirmBtn) {
+        if (!confirmBtn) return false;
+        if (clickedConfirmButtons.has(confirmBtn)) return true;
+        if (retweetConfirmInFlight) return true;
+
+        // 没有刚捕获到的原帖时不要自动确认，避免误点用户手动打开的菜单。
+        const targetSnapshot = pendingTweet;
+        if (!isFreshPendingTweet(targetSnapshot)) return false;
+
+        retweetConfirmInFlight = true;
+        clickedConfirmButtons.add(confirmBtn);
+
+        console.log('🔍 发现确认转帖按钮');
+
+        const tryClick = (attempt = 1) => {
+            if (!confirmBtn.isConnected || attempt > 20) {
+                retweetConfirmInFlight = false;
+                return;
+            }
+
+            if (!isClickable(confirmBtn)) {
+                setTimeout(() => tryClick(attempt + 1), 150);
+                return;
+            }
+
+            // 1. 确认转帖
+            confirmBtn.click();
+            console.log('✅ 转帖已确认');
+
+            // 2. 等弹窗关闭和 article 重绘后，再重新定位原帖点喜欢
+            setTimeout(() => {
+                likeTweet(resolvePendingArticle(targetSnapshot));
+
+                // 3. 关闭可能残留的弹窗
+                document.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'Escape',
+                    bubbles: true,
+                    cancelable: true,
+                }));
+
+                // 4. 清空记录
+                if (pendingTweet === targetSnapshot) pendingTweet = null;
+                retweetConfirmInFlight = false;
+            }, 650);
+        };
+
+        setTimeout(tryClick, 80);
+        return true;
+    }
+
+    function scanForConfirmButton(root = document) {
+        const confirmBtn = isConfirmRetweetButton(root) ? root : findConfirmButton(root);
+        return handleConfirmButton(confirmBtn);
+    }
+
     /**
      * 在指定推文容器内点喜欢（仅未点赞状态）。
      */
@@ -155,6 +215,8 @@
         const retweetBtn = e.target.closest?.(RETWEET_BUTTON_SELECTOR);
         if (!retweetBtn || retweetBtn.dataset?.testid === 'unretweet') return;
         rememberTweet(retweetBtn);
+        setTimeout(() => scanForConfirmButton(document), 120);
+        setTimeout(() => scanForConfirmButton(document), 350);
     }, true);
 
     // ── 第二步：监听 DOM 变化，等待确认"转帖"按钮出现 ─────────
@@ -163,47 +225,7 @@
             for (const node of mutation.addedNodes) {
                 if (!isElement(node)) continue;
 
-                const confirmBtn = isConfirmRetweetButton(node) ? node : findConfirmButton(node);
-                if (!confirmBtn) continue;
-                if (clickedConfirmButtons.has(confirmBtn)) return;
-                if (retweetConfirmInFlight) return;
-                retweetConfirmInFlight = true;
-                clickedConfirmButtons.add(confirmBtn);
-
-                console.log('🔍 发现确认转帖按钮');
-
-                // 快照当前目标推文（防止后续点击被覆盖）
-                const targetSnapshot = pendingTweet;
-
-                const tryClick = () => {
-                    if (!isClickable(confirmBtn)) {
-                        setTimeout(tryClick, 150);
-                        return;
-                    }
-
-                    // 1. 确认转帖
-                    confirmBtn.click();
-                    console.log('✅ 转帖已确认');
-
-                    // 2. 等弹窗关闭和 article 重绘后，再重新定位原帖点喜欢
-                    setTimeout(() => {
-                        likeTweet(resolvePendingArticle(targetSnapshot));
-
-                        // 3. 关闭可能残留的弹窗
-                        document.dispatchEvent(new KeyboardEvent('keydown', {
-                            key: 'Escape',
-                            bubbles: true,
-                            cancelable: true,
-                        }));
-
-                        // 4. 清空记录
-                        if (pendingTweet === targetSnapshot) pendingTweet = null;
-                        retweetConfirmInFlight = false;
-                    }, 650);
-                };
-
-                setTimeout(tryClick, 80);
-                return; // 找到一个就够了
+                if (scanForConfirmButton(node)) return; // 找到一个就够了
             }
         }
     });
