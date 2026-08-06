@@ -2,7 +2,7 @@
 // @name         x自动点击第二次【转帖】按钮 + 精准喜欢
 // @match        *://x.com/*
 // @exclude      *://x.com/i/*
-// @version      4.0.2
+// @version      4.0.3
 // @description  自动确认转帖，并精准对该条帖子/评论点喜欢，不误触其他推文
 // @grant        none
 // @run-at       document-idle
@@ -11,10 +11,14 @@
 (function() {
     'use strict';
 
-    const VERSION = '4.0.2';
+    const VERSION = '4.0.3';
     const PENDING_TWEET_TTL_MS = 8000;
+    const CONFIRM_SCAN_INTERVAL_MS = 120;
+    const CONFIRM_SCAN_MAX_ATTEMPTS = 50;
+    const LIKE_RETRY_INTERVAL_MS = 150;
+    const LIKE_RETRY_MAX_ATTEMPTS = 20;
     const RETWEET_CONFIRM_TESTIDS = ['retweetConfirm', 'retweetConfirmLegacy'];
-    const RETWEET_CONFIRM_TEXTS = ['转帖', '轉帖', 'Repost', 'Retweet'];
+    const RETWEET_CONFIRM_TEXTS = ['转帖', '轉帖', '转发', '轉發', 'Repost', 'Retweet'];
     const RETWEET_BUTTON_SELECTOR = [
         '[data-testid="retweet"]',
         '[aria-label*="转帖"]',
@@ -32,6 +36,7 @@
     // 记录用户点击转帖按钮时所在的推文，避免后续误触其他推文
     let pendingTweet = null;
     let retweetConfirmInFlight = false;
+    let confirmScanSession = 0;
     const clickedConfirmButtons = new WeakSet();
 
     // ── 工具函数 ────────────────────────────────────────────────
@@ -41,7 +46,10 @@
     }
 
     function normalizedText(el) {
-        return (el?.textContent || '').replace(/\s+/g, ' ').trim();
+        return (el?.textContent || '')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
     }
 
     function isClickable(element) {
@@ -101,34 +109,49 @@
     }
 
     function isConfirmRetweetButton(el) {
-        if (!isElement(el) || !isClickable(el)) return false;
+        if (!isElement(el)) return false;
 
-        if (RETWEET_CONFIRM_TESTIDS.includes(el.dataset?.testid)) return true;
+        const actionTarget = el.closest('[role="menuitem"], [role="button"], button') || el;
+        if (!isClickable(actionTarget)) return false;
 
-        const actionable = el.closest('[role="menuitem"], [role="button"], button, div');
-        if (!actionable || actionable !== el) return false;
+        if (
+            RETWEET_CONFIRM_TESTIDS.includes(el.dataset?.testid) ||
+            RETWEET_CONFIRM_TESTIDS.includes(actionTarget.dataset?.testid)
+        ) {
+            return true;
+        }
 
-        const text = normalizedText(el);
+        const text = normalizedText(actionTarget);
         if (!RETWEET_CONFIRM_TEXTS.includes(text)) return false;
 
-        const aria = el.getAttribute('aria-label') || '';
-        const testid = el.getAttribute('data-testid') || '';
+        const aria = actionTarget.getAttribute('aria-label') || '';
+        const testid = actionTarget.getAttribute('data-testid') || '';
         return Boolean(
             /retweet|repost/i.test(testid) ||
             /转帖|轉帖|Repost|Retweet/i.test(aria) ||
-            el.closest('[role="menu"]') ||
-            el.closest('[data-testid="Dropdown"]')
+            actionTarget.getAttribute('role') === 'menuitem' ||
+            actionTarget.closest('[role="menu"]') ||
+            actionTarget.closest('[data-testid="Dropdown"]')
         );
     }
 
+    function getConfirmActionTarget(el) {
+        return el?.closest?.('[role="menuitem"], [role="button"], button') || el;
+    }
+
     function findConfirmButton(root) {
-        const direct = RETWEET_CONFIRM_TESTIDS
-            .map(testid => root.querySelector?.(`[data-testid="${testid}"]`))
-            .find(Boolean);
-        if (direct && isClickable(direct)) return direct;
+        for (const testid of RETWEET_CONFIRM_TESTIDS) {
+            const direct = root.querySelector?.(`[data-testid="${testid}"]`);
+            const actionTarget = getConfirmActionTarget(direct);
+            if (isConfirmRetweetButton(actionTarget)) return actionTarget;
+        }
 
         const candidates = root.querySelectorAll?.('[role="menuitem"], [role="button"], button, div') || [];
-        return Array.from(candidates).find(isConfirmRetweetButton) || null;
+        for (const candidate of candidates) {
+            const actionTarget = getConfirmActionTarget(candidate);
+            if (isConfirmRetweetButton(actionTarget)) return actionTarget;
+        }
+        return null;
     }
 
     function handleConfirmButton(confirmBtn) {
@@ -141,13 +164,13 @@
         if (!isFreshPendingTweet(targetSnapshot)) return false;
 
         retweetConfirmInFlight = true;
-        clickedConfirmButtons.add(confirmBtn);
 
         console.log('🔍 发现确认转帖按钮');
 
         const tryClick = (attempt = 1) => {
             if (!confirmBtn.isConnected || attempt > 20) {
                 retweetConfirmInFlight = false;
+                if (isFreshPendingTweet(targetSnapshot)) startConfirmPolling(targetSnapshot);
                 return;
             }
 
@@ -157,12 +180,13 @@
             }
 
             // 1. 确认转帖
+            clickedConfirmButtons.add(confirmBtn);
             confirmBtn.click();
             console.log('✅ 转帖已确认');
 
             // 2. 等弹窗关闭和 article 重绘后，再重新定位原帖点喜欢
             setTimeout(() => {
-                likeTweet(resolvePendingArticle(targetSnapshot));
+                likePendingTweet(targetSnapshot);
 
                 // 3. 关闭可能残留的弹窗
                 document.dispatchEvent(new KeyboardEvent('keydown', {
@@ -186,26 +210,53 @@
         return handleConfirmButton(confirmBtn);
     }
 
+    function startConfirmPolling(snapshot) {
+        const session = ++confirmScanSession;
+        const poll = (attempt = 1) => {
+            if (
+                session !== confirmScanSession ||
+                pendingTweet !== snapshot ||
+                !isFreshPendingTweet(snapshot)
+            ) {
+                return;
+            }
+            if (scanForConfirmButton(document)) return;
+            if (attempt < CONFIRM_SCAN_MAX_ATTEMPTS) {
+                setTimeout(() => poll(attempt + 1), CONFIRM_SCAN_INTERVAL_MS);
+            }
+        };
+        poll();
+    }
+
     /**
      * 在指定推文容器内点喜欢（仅未点赞状态）。
      */
-    function likeTweet(articleEl) {
+    function likeTweet(articleEl, warnOnFailure = true) {
         if (!articleEl) {
-            console.warn('⚠️ 无目标推文，跳过喜欢');
-            return;
+            if (warnOnFailure) console.warn('⚠️ 无目标推文，跳过喜欢');
+            return false;
         }
 
         if (articleEl.querySelector('[data-testid="unlike"]')) {
             console.log('ℹ️ 已喜欢过，跳过');
-            return;
+            return true;
         }
 
         const likeBtn = articleEl.querySelector(LIKE_BUTTON_SELECTOR);
         if (likeBtn && isClickable(likeBtn)) {
             likeBtn.click();
             console.log('✅ 精准喜欢成功', articleEl);
+            return true;
         } else {
-            console.warn('⚠️ 未找到可点击的喜欢按钮');
+            if (warnOnFailure) console.warn('⚠️ 未找到可点击的喜欢按钮');
+            return false;
+        }
+    }
+
+    function likePendingTweet(snapshot, attempt = 1) {
+        if (likeTweet(resolvePendingArticle(snapshot), attempt === LIKE_RETRY_MAX_ATTEMPTS)) return;
+        if (attempt < LIKE_RETRY_MAX_ATTEMPTS) {
+            setTimeout(() => likePendingTweet(snapshot, attempt + 1), LIKE_RETRY_INTERVAL_MS);
         }
     }
 
@@ -214,9 +265,9 @@
     document.addEventListener('click', function(e) {
         const retweetBtn = e.target.closest?.(RETWEET_BUTTON_SELECTOR);
         if (!retweetBtn || retweetBtn.dataset?.testid === 'unretweet') return;
+        if (retweetBtn.closest('[role="menuitem"]')) return;
         rememberTweet(retweetBtn);
-        setTimeout(() => scanForConfirmButton(document), 120);
-        setTimeout(() => scanForConfirmButton(document), 350);
+        if (pendingTweet) startConfirmPolling(pendingTweet);
     }, true);
 
     // ── 第二步：监听 DOM 变化，等待确认"转帖"按钮出现 ─────────
