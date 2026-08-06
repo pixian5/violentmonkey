@@ -56,9 +56,9 @@ addPublicCommands(browser.notifications?.create ? {
   },
 });
 
-browser.notifications?.onClicked.addListener((id) => notifyOpener(id, true));
+browser.notifications?.onClicked?.addListener((id) => notifyOpener(id, true));
 
-browser.notifications?.onClosed.addListener((id) => notifyOpener(id, false));
+browser.notifications?.onClosed?.addListener((id) => notifyOpener(id, false));
 
 async function notifyOpener(id, isClick) {
   if (init) await sessionData;

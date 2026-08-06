@@ -31,7 +31,7 @@ initDependency(
     browser.runtime.getPlatformInfo(),
     browser.runtime.getBrowserInfo?.(),
     navUAD?.getHighEntropyValues([kFullVersionList]),
-    IS_FIREFOX ? [] : browserWindows.getAll(),
+    IS_FIREFOX || !browserWindows?.getAll ? [] : browserWindows.getAll(),
   ]).then(([
     { os, arch },
     { name, version } = {},
@@ -52,7 +52,7 @@ initDependency(
     ua[kFullVersionList] = list;
     if (FIREFOX) FIREFOX = parseFloat(version);
     else if (wnd) checkVivaldi(wnd);
-    else browserWindows.onCreated::listenOnce(checkVivaldi);
+    else browserWindows?.onCreated::listenOnce(checkVivaldi);
   })
 );
 

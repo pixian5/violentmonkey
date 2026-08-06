@@ -1,7 +1,7 @@
 {
   "name": "violentmonkey",
   "description": "Violentmonkey",
-  "version": "2.46.2",
+  "version": "2.46.3",
   "main": "electron/main.js",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
@@ -145,5 +145,5 @@
     ],
     "testEnvironment": "./test/mock/env.js"
   },
-  "beta": 2
+  "beta": 3
 }

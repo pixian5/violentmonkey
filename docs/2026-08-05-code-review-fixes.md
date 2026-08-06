@@ -6,3 +6,4 @@
 - 修复 ZIP 导入日期、重复端口监听器和导入后索引缓存重建。
 - OAuth 回调仅接受当前授权标签页，并在创建标签页前注册监听器。
 - Electron webview 弹窗事件阻止默认窗口创建，避免重复打开窗口。
+- 扩展后台兼容缺失的 `windows`、`permissions`、`notifications` API，避免初始化异常。
