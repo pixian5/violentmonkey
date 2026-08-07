@@ -81,6 +81,14 @@ module.exports = {
       ],
     },
   }, {
+    files: ['src/**/*.js', 'src/**/*.vue'],
+    rules: {
+      'no-restricted-globals': ['error', {
+        name: 'process',
+        message: 'Browser code must use constants injected on `__` by webpack.',
+      }],
+    },
+  }, {
     files: ['src/background/sw.js', 'src/background/utils/offscreen.js'],
     env: { serviceworker: true, webextensions: true },
   }, {

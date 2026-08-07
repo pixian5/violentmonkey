@@ -91,7 +91,10 @@ function buildSafariHostApp(identity, teamId) {
     'build',
   ];
   const env = { ...process.env };
-  if (identity) args.splice(-1, 0, 'CODE_SIGN_IDENTITY=Apple Development');
+  if (identity) {
+    const identityType = identity.split(':', 1)[0];
+    args.splice(-1, 0, `CODE_SIGN_IDENTITY=${identityType}`);
+  }
   if (teamId) args.splice(-1, 0, `DEVELOPMENT_TEAM=${teamId}`);
   const result = spawnSync('xcodebuild', args, {
     cwd: projectRoot,

@@ -241,53 +241,62 @@ events.on('change', (state) => {
 
 // --- openAuthPage (Promise-based with timeout) ---
 
-let unregister;
-let authResolve = null;
-let authTimer = null;
+let authAttempt;
+
+function finishAuthAttempt(attempt, result, closeTab) {
+  if (!attempt || attempt.done) return;
+  attempt.done = true;
+  clearTimeout(attempt.timer);
+  attempt.unregister?.();
+  if (closeTab && attempt.tabId != null) {
+    browser.tabs.remove(attempt.tabId).catch(noop);
+  }
+  if (authAttempt === attempt) authAttempt = null;
+  attempt.resolve(result);
+}
 
 export function openAuthPage(url, redirectUri) {
-  unregister?.();
-  let tabId;
+  finishAuthAttempt(authAttempt, null, true);
   let resolvePromise;
   const promise = new Promise((resolve) => {
     resolvePromise = resolve;
   });
-  authResolve = resolvePromise;
-  authTimer = setTimeout(() => {
-    authResolve = null;
-    resolvePromise(null);
-  }, 300_000);
+  const attempt = authAttempt = {
+    done: false,
+    resolve: resolvePromise,
+    tabId: null,
+    timer: null,
+    unregister: null,
+  };
   const handler = (info) => {
-    if (info.tabId !== tabId) return;
-    browser.tabs.remove(tabId);
-    setTimeout(unregister, 0);
-    if (authResolve) {
-      clearTimeout(authTimer);
-      authResolve(info.url);
-      authResolve = null;
-    }
+    if (info.tabId !== attempt.tabId) return;
+    finishAuthAttempt(attempt, info.url, true);
     return { cancel: true };
   };
-  unregister = () => {
+  attempt.unregister = () => {
     browser.webRequest.onBeforeRequest.removeListener(handler);
   };
   redirectUri = redirectUri.replace(/:\d+/, '');
-  browser.webRequest.onBeforeRequest.addListener(
-    handler,
-    {
-      urls: [`${redirectUri}*`],
-      types: [kMainFrame, 'xmlhttprequest'],
-    },
-    ['blocking'],
-  );
+  try {
+    browser.webRequest.onBeforeRequest.addListener(
+      handler,
+      {
+        urls: [`${redirectUri}*`],
+        types: [kMainFrame, 'xmlhttprequest'],
+      },
+      ['blocking'],
+    );
+  } catch {
+    finishAuthAttempt(attempt, null);
+    return promise;
+  }
+  attempt.timer = setTimeout(finishAuthAttempt, 300_000, attempt, null, true);
   browser.tabs.create({ url }).then(
-    ({ id }) => { tabId = id; },
-    () => {
-      unregister();
-      clearTimeout(authTimer);
-      authResolve = null;
-      resolvePromise(null);
+    ({ id }) => {
+      attempt.tabId = id;
+      if (attempt.done) browser.tabs.remove(id).catch(noop);
     },
+    () => finishAuthAttempt(attempt, null),
   );
   return promise;
 }

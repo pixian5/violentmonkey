@@ -21,7 +21,7 @@ import { clearStorageCache } from './storage-cache';
 import { forEachTab, tabsOnRemoved } from './tabs';
 import { clearValueOpener } from './values';
 
-const IS_SAFARI = process.env.TARGET === 'safari';
+const IS_SAFARI = __.TARGET === 'safari';
 
 export let isApplied;
 export let injectInto;

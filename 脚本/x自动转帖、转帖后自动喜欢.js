@@ -2,7 +2,7 @@
 // @name         x自动点击第二次【转帖】按钮 + 精准喜欢
 // @match        *://x.com/*
 // @exclude      *://x.com/i/*
-// @version      4.0.3
+// @version      4.0.4
 // @description  自动确认转帖，并精准对该条帖子/评论点喜欢，不误触其他推文
 // @grant        none
 // @run-at       document-idle
@@ -11,7 +11,7 @@
 (function() {
     'use strict';
 
-    const VERSION = '4.0.3';
+    const VERSION = '4.0.4';
     const PENDING_TWEET_TTL_MS = 8000;
     const CONFIRM_SCAN_INTERVAL_MS = 120;
     const CONFIRM_SCAN_MAX_ATTEMPTS = 50;
@@ -143,7 +143,7 @@
         for (const testid of RETWEET_CONFIRM_TESTIDS) {
             const direct = root.querySelector?.(`[data-testid="${testid}"]`);
             const actionTarget = getConfirmActionTarget(direct);
-            if (isConfirmRetweetButton(actionTarget)) return actionTarget;
+            if (isConfirmRetweetButton(direct)) return actionTarget;
         }
 
         const candidates = root.querySelectorAll?.('[role="menuitem"], [role="button"], button, div') || [];

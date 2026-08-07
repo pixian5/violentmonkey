@@ -52,6 +52,8 @@ function buildManifest(base) {
       'notifications',
       'webRequestBlocking',
     ].includes(key));
+    data.optional_permissions = data.optional_permissions?.filter(key => key !== 'downloads');
+    if (!data.optional_permissions?.length) delete data.optional_permissions;
     delete data.commands?._execute_browser_action;
   }
   if (isBeta()) {

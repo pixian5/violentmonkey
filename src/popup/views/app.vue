@@ -244,7 +244,7 @@ import { handleTabNavigation, isInput, kbdTypable, keyboardService } from '@/com
 import { isFullscreenPopup, store } from '../utils';
 
 let mousedownElement;
-const IS_SAFARI = process.env.TARGET === 'safari';
+const IS_SAFARI = __.TARGET === 'safari';
 const HOME = extensionManifest.homepage_url.split('/')[2];
 const NAME = `${extensionManifest.name} ${__.VM_VER}${__.MV3 ? ' MV3' : ''}`;
 const TARDY_MATCH = i18n('msgTardyMatch');

@@ -34,7 +34,7 @@ A test build is generated automatically for changes between beta releases. It ca
 
 Install [Node.js](https://nodejs.org/) and PNPM.
 The version of Node.js should match `"node"` key in `package.json`.
-This project is pinned to Yarn `1.22.22`.
+This project is pinned to the pnpm version in the `"packageManager"` field.
 
 ``` sh
 # Install dependencies
@@ -72,13 +72,13 @@ installed, or tested for normal extension work.
 
 ``` sh
 # Install dependencies
-$ yarn
+$ pnpm install
 
 # Run the desktop shell locally
-$ yarn macos:dev
+$ pnpm macos:dev
 
 # Package a macOS .app in build/macos/
-$ yarn macos:dist
+$ pnpm macos:dist
 ```
 
 If a local code-signing certificate is available in Keychain, the packaging
@@ -91,17 +91,17 @@ Safari packaging uses Apple's Web Extension converter plus Xcode.
 
 ``` sh
 # Build a Safari-compatible extension bundle and host app
-$ yarn safari:dist
+$ pnpm safari:dist
 
 # Launch the Safari host app the correct way so macOS registers the extension
-$ yarn safari:run
+$ pnpm safari:run
 ```
 
 The generated Safari host app is placed in `build/safari/DerivedData/Build/Products/Debug/`.
 
 Do not launch `ViolentmonkeySafari.app/Contents/MacOS/ViolentmonkeySafari` directly.
 On recent macOS versions this may skip the normal app registration flow, so Safari
-won't list the extension even though the build succeeded. `yarn safari:run` opens
+won't list the extension even though the build succeeded. `pnpm safari:run` opens
 the `.app` bundle via LaunchServices, stops any old host process, and waits until
 `pluginkit` reports the Safari extension as registered.
 
