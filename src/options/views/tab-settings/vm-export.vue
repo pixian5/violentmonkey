@@ -22,6 +22,7 @@ import { getScriptName, sendCmdDirectly } from '@/common';
 import { formatDate } from '@/common/date';
 import options from '@/common/options';
 import { downloadBlob } from '@/common/download';
+import { exportTextBackup } from '@/fork/txt-transfer';
 import { vmZipEntryName } from '@/options/utils';
 import SettingCheck from '@/common/ui/setting-check';
 import SettingText from '@/common/ui/setting-text';
@@ -51,7 +52,14 @@ async function handleExport() {
 async function handleExportTxt() {
   try {
     exporting.value = true;
-    const blob = await exportTextData();
+    const blob = await exportTextBackup({
+      data: await sendCmdDirectly('ExportZip', {
+        values: options.get('exportValues'),
+      }),
+      withValues: options.get('exportValues'),
+      settings: options.get(),
+      normalizeFilename,
+    });
     downloadBlob(blob, txtFileName.value);
   } finally {
     exporting.value = false;
@@ -108,42 +116,6 @@ async function exportData() {
   return new Blob([zipSync(files)], { type: 'application/zip' });
 }
 
-async function exportTextData() {
-  const withValues = options.get('exportValues');
-  const data = await sendCmdDirectly('ExportZip', {
-    values: withValues,
-  });
-  const names = {};
-  const backup = {
-    format: 'violentmonkey-text-backup',
-    version: 1,
-    settings: options.get(),
-    scripts: [],
-  };
-  delete backup.settings.sync;
-  (data?.items || []).forEach(({ script, code }) => {
-    let name = normalizeFilename(getScriptName(script));
-    if (names[name]) {
-      names[name] += 1;
-      name = `${name}_${names[name]}`;
-    } else names[name] = 1;
-    const { lastModified, lastUpdated } = script.props;
-    backup.scripts.push({
-      name,
-      code,
-      custom: script.custom,
-      config: script.config,
-      position: script.props.position,
-      props: {
-        lastModified,
-        lastUpdated,
-        uri: script.props.uri,
-      },
-      values: withValues ? data.values[script.props.id] : undefined,
-    });
-  });
-  return new Blob([JSON.stringify(backup, null, 2)], { type: 'text/plain;charset=utf-8' });
-}
 </script>
 
 <style>

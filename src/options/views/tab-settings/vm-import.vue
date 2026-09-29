@@ -29,7 +29,9 @@ import { listenOnce } from '@/common/browser';
 import { kOrigTag, kTag, RUN_AT_RE } from '@/common/consts';
 import options from '@/common/options';
 import { showConfirmation } from '@/common/ui';
-import { FORK_TARGET, IS_SAFARI } from '@/fork/target';
+import { FORK_TARGET } from '@/fork/target';
+import { parseScriptForImport } from '@/fork/script-import';
+import { importTextScriptFile, withTimeout } from '@/fork/txt-transfer';
 import {
   kComment, kDownloadURL, kExclude, kInclude, kMatch, kOrigExclude, kOrigInclude, kOrigMatch, runInBatch, store,
   vmZipEntryName,
@@ -44,12 +46,6 @@ const showDebug = true;
 const debugLabel = `导入调试: TARGET=${FORK_TARGET || 'unknown'} `
   + `VM_VER=${__.VM_VER || 'n/a'} `
   + `时间=${new Date().toLocaleTimeString()}`;
-const IMPORT_PORT_NAME = 'importScript';
-const IMPORT_CHUNK_SIZE = 64 * 1024;
-const IMPORT_PORT_READY_TIMEOUT = 1500;
-const IMPORT_PORT_READY_RETRY = 3;
-const IMPORT_STORAGE_PREFIX = 'import:code:';
-const IMPORT_USE_STORAGE = IS_SAFARI;
 const VALUE_BATCH_BYTES = 256 * 1024;
 const VALUE_BATCH_COUNT = 10;
 const buttonImportScriptFile = '从文件导入脚本';
@@ -146,203 +142,8 @@ async function importTextScript(file) {
     reportDebug('导入被批处理锁定');
     return;
   }
-  runInBatch(doImportTextScript, file);
-}
-
-async function doImportTextScript(file) {
-  if (!file) return;
   reports.length = 0;
-  reportDebug('开始导入 TXT');
-  try {
-    const code = await withTimeout(file.text(), 15000, '读取 TXT 超时');
-    if (!code?.trim()) {
-      throw new Error('TXT 文件为空');
-    }
-    const backup = parseTextBackup(code);
-    if (backup) {
-      await importTextBackup(backup, file.name || 'imported.txt');
-      return;
-    }
-    const result = await withTimeout(
-      parseScriptForImport({ isNew: true }, code, file.name || 'imported.txt'),
-      120000,
-      `TXT 导入超时: ${file.name || 'imported.txt'}`
-    );
-    report('', file.name, 'info');
-    report(i18n('msgInstalled'), result?.update?.meta?.name || file.name, 'info');
-    await refreshAfterImport();
-    reportDebug('TXT 导入完成');
-  } catch (e) {
-    report(e, file?.name, 'critical');
-  }
-}
-
-function parseTextBackup(code) {
-  try {
-    const data = JSON.parse(code);
-    return data?.format === 'violentmonkey-text-backup'
-      && Array.isArray(data.scripts)
-      && data
-      || null;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function importTextBackup(backup, fileName) {
-  reportDebug('识别为 TXT 备份');
-  const scripts = backup.scripts || [];
-  const importSettings = options.get('importSettings') && backup.settings;
-  const importScriptData = options.get('importScriptData');
-  for (const item of scripts) {
-    const result = await withTimeout(
-      parseScriptForImport({
-        custom: item.custom,
-        config: item.config,
-        position: item.position,
-        props: item.props,
-      }, item.code, `${item.name || 'script'}.txt`),
-      120000,
-      `TXT 备份导入超时: ${item.name || 'script'}`
-    );
-    report(i18n('msgInstalled'), result?.update?.meta?.name || item.name, 'info');
-    if (importScriptData && item.values && result?.update?.props?.uri) {
-      await sendValueStoresBatched({
-        [result.update.props.uri]: item.values,
-      });
-    }
-  }
-  if (importSettings && isPlainObject(importSettings)) {
-    delete importSettings.sync;
-    await withTimeout(
-      sendCmdDirectly('SetOptions', importSettings, { retry: true, bgTimeout: 1200 }),
-      15000,
-      'SetOptions 超时'
-    );
-  }
-  try {
-    await withTimeout(
-      sendCmdDirectly('RebuildScriptIndex', null, { retry: true, bgTimeout: 1200 }),
-      20000,
-      'RebuildScriptIndex 超时'
-    );
-  } catch (e) {
-    await withTimeout(
-      sendCmdDirectly('CheckPosition', null, { retry: true, bgTimeout: 1200 }),
-      15000,
-      'CheckPosition 超时'
-    );
-  }
-  report('', fileName, 'info');
-  await refreshAfterImport();
-  reportDebug('TXT 备份导入完成');
-}
-
-async function parseScriptForImport(data, code, filename) {
-  const canUseStorage = !!browser?.storage?.local?.set;
-  if (IMPORT_USE_STORAGE && canUseStorage) {
-    return parseScriptViaStorage(data, code, filename);
-  }
-  try {
-    return await parseScriptViaPort(data, code, filename);
-  } catch (err) {
-    reportDebug(`端口解析失败，尝试存储: ${err?.message || err}`);
-    if (canUseStorage) {
-      return parseScriptViaStorage(data, code, filename);
-    }
-    throw err;
-  }
-}
-
-function parseScriptViaPort(data, code, filename) {
-  return new Promise((resolve, reject) => {
-    const port = browser.runtime.connect({ name: IMPORT_PORT_NAME });
-    let done = false;
-    let ready = false;
-    let startAttempts = 0;
-    let startTimer;
-    let chunkTaskStarted = false;
-    const finish = (err, result) => {
-      if (done) return;
-      done = true;
-      clearTimeout(startTimer);
-      try { port.disconnect(); } catch (e) { /* ignore */ }
-      if (err) reject(err);
-      else resolve(result);
-    };
-    port.onMessage.addListener(msg => {
-      if (done) return;
-      if (msg?.type === 'ready') {
-        ready = true;
-        clearTimeout(startTimer);
-        if (!chunkTaskStarted) {
-          chunkTaskStarted = true;
-          sendChunks();
-        }
-        return;
-      }
-      if (msg?.ok) finish(null, msg.result);
-      else if (msg?.error) finish(new Error(msg.error));
-    });
-    port.onDisconnect.addListener(() => {
-      if (!done) finish(new Error(`导入端口断开: ${filename}`));
-    });
-    const sendStart = () => {
-      if (done || ready) return;
-      startAttempts += 1;
-      try {
-        port.postMessage({ type: 'start', data: { ...data, code: undefined } });
-      } catch (e) {
-        finish(e);
-        return;
-      }
-      if (startAttempts < IMPORT_PORT_READY_RETRY) {
-        startTimer = setTimeout(sendStart, IMPORT_PORT_READY_TIMEOUT);
-      } else {
-        startTimer = setTimeout(() => {
-          if (!ready && !done) finish(new Error(`导入端口未就绪: ${filename}`));
-        }, IMPORT_PORT_READY_TIMEOUT);
-      }
-    };
-    const sendChunks = async () => {
-      try {
-        const codeLen = code.length;
-        for (let i = 0; i < codeLen; i += IMPORT_CHUNK_SIZE) {
-          port.postMessage({ type: 'chunk', chunk: code.slice(i, i + IMPORT_CHUNK_SIZE) });
-          if (i && i % (IMPORT_CHUNK_SIZE * 8) === 0) {
-            await makePause(0);
-          }
-        }
-        port.postMessage({ type: 'end' });
-      } catch (err) {
-        finish(err);
-      }
-    };
-    sendStart();
-  });
-}
-
-async function parseScriptViaStorage(data, code, filename) {
-  const codeKey = `${IMPORT_STORAGE_PREFIX}${getUniqId()}`;
-  reportDebug(`写入临时脚本: ${filename}`);
-  try {
-    await withTimeout(
-      browser.storage.local.set({ [codeKey]: code }),
-      20000,
-      `写入脚本超时: ${filename}`
-    );
-    return await withTimeout(
-      sendCmdDirectly(
-        'ParseScriptFromStorage',
-        { ...data, codeKey },
-        { retry: true, bgTimeout: 1200 }
-      ),
-      120000,
-      `ParseScript 超时: ${filename}`
-    );
-  } finally {
-    browser.storage.local.remove(codeKey).catch(() => {});
-  }
+  runInBatch(importTextScriptFile, file, txtTransferDeps);
 }
 
 async function doImportBackup(buf, zipName) {
@@ -655,15 +456,6 @@ function waitPortReady(port, timeout = 1500) {
   });
 }
 
-function withTimeout(promise, timeout, label) {
-  let timer;
-  const err = new Error(label || 'Timeout');
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(err), timeout);
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
-}
-
 function report(text, name, type = 'critical') {
   const message = text && (text.message || text.code) ? (text.message || text.code) : `${text}`;
   reports.push({ text: message, name, type });
@@ -672,6 +464,20 @@ function report(text, name, type = 'critical') {
 function reportDebug(text) {
   report(text, '', 'debug');
 }
+
+// TXT 导入逻辑在 src/fork/txt-transfer.js，这里只提供 UI 与流程依赖
+const parseScript = (data, code, filename) => parseScriptForImport(data, code, filename, {
+  reportDebug,
+  withTimeout,
+});
+const txtTransferDeps = {
+  report,
+  reportDebug,
+  parseScriptForImport: parseScript,
+  refreshAfterImport,
+  sendValueStoresBatched,
+  options,
+};
 
 function initDragDrop(targetElement) {
   let leaveTimer;
