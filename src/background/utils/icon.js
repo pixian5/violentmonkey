@@ -1,8 +1,8 @@
 import { i18n, ignoreChromeErrors, makeDataUri, noop } from '@/common';
 import { registerInjector } from '@/common/browser-scripts-api';
 import { BLACKLIST } from '@/common/consts';
-import { objectPick } from '@/common/object';
 import loadIconData from '@/common/load-icon-data';
+import wrapActionApi from './action-api';
 import { addOwnCommands, commands, init } from './init';
 import { installedOver } from './on-installed';
 import { getOption, hookOptions, setOption } from './options';
@@ -27,25 +27,16 @@ const iconCache = {};
 const iconDataCache = {};
 /** @return {string | Promise<string>} */
 export const getImageData = url => iconCache[url] || (iconCache[url] = loadIcon(url));
-// Firefox Android does not support such APIs, use noop
+// Firefox Android does not support such APIs
 const browserAction = (() => {
   // Using `chrome` namespace in order to skip our browser.js polyfill in Chrome/Safari
   const api = (globalThis.chrome || globalThis.browser)?.[__.MV3 ? 'action' : 'browserAction'];
-  // Some methods like setBadgeText added callbacks only in Chrome 67+.
-  const makeMethod = fn => (...args) => {
-    try {
-      // Suppress the "no tab id" error when setting an icon/badge as it cannot be reliably prevented
-      api::fn(...args, ignoreChromeErrors);
-    } catch (e) {
-      api::fn(...args);
-    }
-  };
-  return objectPick(api, [
+  return wrapActionApi(api, [
     'setIcon',
     'setBadgeText',
     'setBadgeBackgroundColor',
     'setTitle',
-  ], fn => (fn ? makeMethod(fn) : noop));
+  ]);
 })();
 const KEY_SHOW_BADGE = 'showBadge';
 const KEY_BADGE_COLOR = 'badgeColor';
