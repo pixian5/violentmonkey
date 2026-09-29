@@ -17,12 +17,14 @@ import {
 } from './script';
 import { testBlacklist, testerBatch, testScript } from './tester';
 import { getImageData } from './icon';
-import { addOwnCommands, addPublicCommands, commands, resolveInit } from './init';
+import { addOwnCommands, addPublicCommands, commands, init, resolveInit } from './init';
 import { installedOver, NEW_INSTALL } from './on-installed';
 import patchDB from './patch-db';
 import { permissionDownloads } from './permissions';
 import { initOptions, kVersion, setOption } from './options';
-import sessionData, { flushSession, kScriptSizes, scriptSizes } from './session-data';
+import sessionData, {
+  flushSession, kScriptSizes, scriptSizes, setScriptSizes,
+} from './session-data';
 import storage, {
   S_CACHE, S_CODE, S_REQUIRE, S_SCRIPT, S_VALUE,
   S_CACHE_PRE, S_CODE_PRE, S_MOD_PRE, S_REQUIRE_PRE, S_SCRIPT_PRE, S_VALUE_PRE,
@@ -114,13 +116,13 @@ addOwnCommands({
     const [script] = list.splice(i, 1);
     (removed ? removedScripts : aliveScripts).push(script);
   },
-  /** @return {Promise<number>} */
+  /** @return {boolean} */
   Move({ id, offset }) {
     const script = getScriptById(id);
     const index = aliveScripts.indexOf(script);
     aliveScripts.splice(index, 1);
     aliveScripts.splice(index + offset, 0, script);
-    return normalizePosition();
+    return !!normalizePosition();
   },
   ParseMeta: parseMetaWithErrors,
   ParseMetaErrors: data => parseMetaWithErrors(data).errors,
@@ -143,7 +145,7 @@ function resetScriptState() {
   dbKeys.clear();
   aliveScripts.length = 0;
   removedScripts.length = 0;
-  scriptSizes = {}; // eslint-disable-line no-import-assign
+  setScriptSizes({});
   for (const key in scriptMap) delete scriptMap[key];
   for (const key in scriptSiteVisited) delete scriptSiteVisited[key];
 }
@@ -235,8 +237,8 @@ export async function initializeDatabase(reset) {
     }
     vacuum(data); // also calculates `scriptSizes`
     checkRemove();
-    sortScripts();
   }
+  sortScripts();
   if (!__.MV3) {
     setInterval(checkRemove, TIMEOUT_24HOURS);
   }
@@ -301,31 +303,32 @@ function updateLastModified() {
   setOption('lastModified', Date.now());
 }
 
-/** @return {Promise<boolean>} */
-export async function normalizePosition() {
-  const updates = aliveScripts.reduce((res, script, index) => {
+/** @return {void | Promise<Object>} */
+function normalizePosition(positions) {
+  let updates;
+  maxScriptPosition = aliveScripts.length;
+  for (let index = 0; index < maxScriptPosition; index++) {
+    const script = aliveScripts[index];
     const { props } = script;
     const position = index + 1;
     if (props.position !== position) {
       props.position = position;
-      (res || (res = {}))[props.id] = script;
+      (updates ||= {})[props.id] = script;
+      if (positions) positions[props.id] = position;
     }
-    return res;
-  }, null);
-  maxScriptPosition = aliveScripts.length;
-  if (updates) {
-    await storage[S_SCRIPT].set(updates);
-    updateLastModified();
   }
-  return !!updates;
+  if (updates) {
+    updateLastModified();
+    return storage[S_SCRIPT].set(updates);
+  }
 }
 
 /** @return {Promise<Boolean>} */
 export async function sortScripts() {
-  const old = [...aliveScripts];
   aliveScripts.sort((a, b) => (a.props.position || 0) - (b.props.position || 0));
-  if (await normalizePosition() || old.some((val, i) => val !== aliveScripts[i])) {
-    broadcast('ScriptsUpdated');
+  const positions = {};
+  if (normalizePosition(positions) && !init) {
+    broadcast('ScriptsSorted', positions);
     return true;
   }
 }
@@ -645,6 +648,12 @@ export function checkRemove({ force } = {}) {
  */
 export async function updateScriptInfo(id, data) {
   const script = scriptMap[id];
+  // A toggle bumps the global clock so sync merges `config.enabled` like `position`:
+  // last syncer wins by comparing global `lastModified` with the remote meta timestamp.
+  if (data.config?.enabled != null
+  && getInt(script.config.enabled) !== getInt(data.config.enabled)) {
+    updateLastModified();
+  }
   for (const key in data) { // shallow merge
     if (script[key]) Object.assign(script[key], data[key]);
   }
@@ -722,6 +731,7 @@ export async function parseScript(src) {
   }
   props.lastModified = now;
   props.uuid = props.uuid || crypto.randomUUID();
+  const oldEnabled = getInt(config.enabled);
   // Overwriting inner data by `src`, deleting keys for which `src` specifies `null`
   for (const key of ['config', 'custom', 'props']) {
     const dst = script[key];
@@ -729,6 +739,11 @@ export async function parseScript(src) {
       if (srcVal == null) delete dst[srcKey];
       else dst[srcKey] = srcVal;
     });
+  }
+  // A toggle bumps the global clock so sync merges `config.enabled` like `position`.
+  if (src.config?.enabled != null
+  && oldEnabled !== getInt(config.enabled)) {
+    updateLastModified();
   }
   const pos = +src.position;
   if (pos) {
@@ -988,7 +1003,7 @@ export async function vacuum(data) {
       status[key] = -1;
     }
   });
-  scriptSizes = sizes; // eslint-disable-line no-import-assign
+  setScriptSizes(sizes);
   if (__.MV3) flushSession(kScriptSizes, scriptSizes);
   getScriptsByIdsOrAll().forEach((script) => {
     const { meta, props } = script;

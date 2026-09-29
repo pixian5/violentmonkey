@@ -50,7 +50,7 @@ buttonHome:
   message: 홈페이지
 buttonImportData:
   description: Button to choose a file for data import.
-  message: ZIP 파일에서 불러오기
+  message: ZIP 파일에서 가져오기
 buttonInstallFromURL:
   description: Button to ask for URL of a user script.
   message: URL에서 설치
@@ -60,7 +60,10 @@ buttonInstallOptions:
   touched: false
 buttonNew:
   description: Button to create a new script.
-  message: 새로운 유저스크립트
+  message: 새로 만들기
+buttonNewFromFile:
+  description: Button to create a new script from a local file.
+  message: 파일에서 새로 만들기
 buttonOK:
   description: OK button on dialog.
   message: 확인
@@ -174,6 +177,11 @@ descScriptTemplate:
   message: >-
     지원하는 변수: MomentJS와 호환되는 <{{name}}>, <{{url}}>, <{{icon}}>, <{{date}}>,
     <{{date:format}}> 형식. 예: <{{date:YYYY-MM-DD}}>.
+descSyncGitRepoPreexisting:
+  description: >-
+    Note explaining the repository must already exist; Violentmonkey never
+    creates it.
+  message: ''
 disabledScriptsGroup:
   description: 'Used as "Disabled scripts: group"'
   message: 그룹
@@ -254,7 +262,9 @@ fileInstallBlocked:
     모든 유저스크립트에서 모든 파일에 접근할 수 있게 되므로 위험합니다.
 fileInstallBlockedFF:
   description: Text in the installer when a local file is dropped into Firefox window.
-  message: ''
+  message: >-
+    about:addons 페이지를 열고 "Violentmonkey"와 "권한 및 데이터"를 순서대로 클릭한 후, "컴퓨터의 로컬 파일
+    접근"을 활성화하세요.
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: 가나다 순
@@ -307,7 +317,7 @@ headerRecycleBin:
   message: 휴지통
 helpForLocalFile:
   description: Label of the checkbox.
-  message: ''
+  message: 로컬 스크립트를 설치할 수 없을 때 도움말 표시
 hintForBatchAction:
   description: Hint shown next to the buttons for batch actions.
   message: 일치하는 스크립트 $1개
@@ -325,6 +335,9 @@ hintGrantless:
 hintInputURL:
   description: Hint for a prompt box to input URL of a user script.
   message: 'URL 입력:'
+hintInvalidCron:
+  description: Error shown for an invalid five-field cron expression
+  message: ''
 hintRecycleBin:
   description: Hint for recycle bin.
   message: 삭제된 스크립트는 이 곳에 추가되고 7일 간 보관됩니다.
@@ -374,6 +387,7 @@ labelAutoReloadCurrentTabDisabled:
 labelAutoUpdate:
   description: Option to allow automatically checking scripts for updates
   message: $1일마다 업데이트를 확인합니다. (0 = 비활성화)
+  touched: false
 labelBackup:
   description: Label of the import/export section in settings.
   message: 백업
@@ -404,6 +418,30 @@ labelComment:
 labelContributors:
   description: Label for link to contributors.
   message: 기여자
+labelCronDaily:
+  description: Shortcut for a daily cron schedule.
+  message: ''
+labelCronDayOfMonth:
+  description: Label for the day-of-month field in a cron expression.
+  message: ''
+labelCronDayOfWeek:
+  description: Label for the day-of-week field in a cron expression.
+  message: ''
+labelCronHour:
+  description: Label for the hour field in a cron expression.
+  message: ''
+labelCronHourly:
+  description: Shortcut for an hourly cron schedule.
+  message: ''
+labelCronMinute:
+  description: Label for the minute field in a cron expression.
+  message: ''
+labelCronMonth:
+  description: Label for the month field in a cron expression.
+  message: ''
+labelCronTwiceADay:
+  description: Shortcut for a cron schedule that runs twice a day.
+  message: ''
 labelCurrentLang:
   description: Label of current language.
   message: '현재 언어: '
@@ -445,7 +483,7 @@ labelExcludeMatch:
   message: '@exclude-match 규칙'
 labelExportScriptData:
   description: Option to export script data along with scripts.
-  message: 스크립트 데이터 불러오기
+  message: 스크립트 데이터 내보내기
 labelExposeStatus:
   description: Option in advanced settings.
   message: '유저스크립트 카탈로그 사이트에 설치된 버전 표시: $1'
@@ -462,30 +500,32 @@ labelFeedback:
   message: 피드백
 labelFirefoxPatchCsp:
   description: Option in Advanced settings.
-  message: ''
+  message: Firefox에서 CSP 우회
 labelFirefoxPatchCspHint:
   description: >-
     (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
     in Advanced settings.
-  message: ''
+  message: >-
+    웹페이지의 CSP에 무작위 값을 추가하여 Violentmonkey가 $1 주입 모드에서 스크립트를 실행할 수 있게 합니다. 그렇지 않으면
+    스크립트를 수정하여 $2을(를) 사용해야 합니다.
 labelFirefoxPatchCspPopup:
   description: >-
     ($1 is <content>, $2 is a translation for "Bypass CSP") Message for a script
     in the popup's extras menu.
-  message: ''
+  message: 격리된 $1 모드에서는 기능이 제한될 수 있습니다. 설정의 "$2" 옵션을 참고하세요.
 labelGeneral:
   description: Label for general settings.
   message: 일반
   touched: false
 labelGmDownloadViaApi:
   description: Option in Advanced settings to use the browser download API for GM_download.
-  message: ''
+  message: 브라우저 다운로드 API 사용
 labelGmDownloadViaApiHint:
   description: Tooltip for the browser download option in Advanced settings.
-  message: ''
+  message: 스크립트가 다운로드 폴더의 하위 폴더에 파일을 저장할 수 있도록 허용하고, 브라우저 다운로드 바에 진행 상황을 표시합니다.
 labelGrantPermission:
   description: Button to request the API permission.
-  message: ''
+  message: 권한 허용
 labelHelpTranslate:
   description: Label for link to localization guide in about tab
   message: 번역 도와주기
@@ -627,6 +667,29 @@ labelSyncAutomatically:
 labelSyncDisabled:
   description: Label for option to disable sync service.
   message: 없음
+labelSyncGitApiBase:
+  description: Label for the Git API base URL input (GitHub/GHES/Gitea/Forgejo).
+  message: ''
+labelSyncGitBranch:
+  description: Label for the Git branch input.
+  message: ''
+labelSyncGitCreateMethod:
+  description: >-
+    Label for the Git file-creation-method select, matching the createMethod
+    option key.
+  message: ''
+labelSyncGitOwner:
+  description: Label for the Git repository owner input.
+  message: ''
+labelSyncGitPathPrefix:
+  description: Label for the Git path-prefix input (folder within the repo).
+  message: ''
+labelSyncGitRepo:
+  description: Label for the Git repository name input.
+  message: ''
+labelSyncGitToken:
+  description: Label for the Git access token input.
+  message: ''
 labelSyncPassword:
   description: Label for input to hold password.
   message: '비밀번호: '
@@ -677,6 +740,18 @@ labelTranslator:
   description: Label of translator.
   message: '번역자: '
   touched: false
+labelUpdateCustom:
+  description: Option to enter a custom five-field cron expression for script update checks
+  message: ''
+labelUpdateDaily:
+  description: Option to check for script updates every day at noon
+  message: ''
+labelUpdateDisabled:
+  description: Option to disable automatic script update checks
+  message: ''
+labelUpdateSchedule:
+  description: Option to configure automatic script update checks
+  message: ''
 labelUpdateURL:
   description: Label of script @updateURL in custom meta data.
   message: '업데이트 URL:'
@@ -858,6 +933,9 @@ msgReinstallScripts:
     Notification body shown for a missing @require or other resource when
     running such scripts.
   message: 스크립트를 재설치하거나 다시 저장하세요.
+msgRestartToUpdate:
+  description: $1 is the old version, $2 is the new version.
+  message: ''
 msgSameCode:
   description: Shown inside the title when re-installing a script that's already installed.
   message: ' (변경 없음)'
@@ -899,6 +977,11 @@ msgSyncReady:
   description: Message shown when sync will start soon.
   message: 동기화가 곧 시작합니다....
   touched: false
+msgSyncRepoNotFound:
+  description: >-
+    Message shown when the configured Git repository was not found, or the token
+    can't access it. Violentmonkey never creates it automatically.
+  message: ''
 msgSyncing:
   description: Message shown when sync is in progress.
   message: 동기화 진행 중...
@@ -1072,6 +1155,17 @@ titleSearchHintV2:
 
     * 정규표현식: <code>/\w+?/</code>, <code>/\w+?/gi</code>,
     <code>name:/\w+?/</code>, <code>name+re:"\w+? with space"</code>
+titleSyncGitCreateMethod:
+  description: >-
+    Hover title for the Git file-creation-method select, explaining when to
+    change it.
+  message: ''
+titleSyncGitPathPrefix:
+  description: Hover title for the Git path-prefix input, clarifying what it does.
+  message: ''
+titleSyncGitToken:
+  description: Hover title for the Git access token input, clarifying required permissions.
+  message: ''
 toggleInjection:
   description: Label for a keyboard shortcut.
   message: 유저스크립트 인젝션 토글
@@ -1098,6 +1192,14 @@ updateScriptsAll:
 updateScriptsInTab:
   description: Command/button to update scripts that run in current tab.
   message: 현재 탭에서 실행 중인 스크립트 업데이트
+userScriptsPermissionNote:
+  description: Text in the popup or dashboard.
+  message: >-
+    chrome://extensions 페이지에서 Violentmonkey의 세부정보로 들어간 뒤 '사용자 스크립트 허용'을 활성화하고 탭을
+    새로고침해 주세요.
+userScriptsPermissionNoteOld:
+  description: Text in the popup or dashboard in older browsers.
+  message: chrome://extensions에서 '개발자 모드'를 활성화하고 탭을 새로고침해 주세요.
 valueLabelKey:
   description: Label for key of a script value.
   message: 키 (문자열)

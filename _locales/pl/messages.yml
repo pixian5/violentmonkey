@@ -63,6 +63,9 @@ buttonInstallOptions:
 buttonNew:
   description: Button to create a new script.
   message: Nowy skrypt
+buttonNewFromFile:
+  description: Button to create a new script from a local file.
+  message: "Nowy z\_pliku"
 buttonOK:
   description: OK button on dialog.
   message: OK
@@ -149,14 +152,10 @@ descBlacklist:
   message: Czarna lista wstrzykiwań (skrypty nie będą działać w pasujących witrynach)
 descBlacklistNet:
   description: Description for the global network blacklist.
-  message: >-
-    Czarna lista sieci (skrypty nie będą łączyć się z pasującymi witrynami i ich
-    plikami cookie)
+  message: "Czarna lista sieci (skrypty nie będą łączyć się z\_pasującymi witrynami i\_ich plikami ciasteczek)"
 descCustomCSS:
   description: Description of custom CSS section.
-  message: >-
-    Niestandardowy CSS dla stron z opcjami i instalacją skryptu. Jeśli nie
-    jesteś pewien/pewna co to jest, to nie edytuj tego.
+  message: "Niestandardowy CSS dla stron z\_opcjami i\_instalacją skryptu. Jeśli nie masz pewności, do czego służy, nie edytuj tego."
 descEditorOptions:
   description: Description of editor options JSON section.
   message: >-
@@ -184,7 +183,14 @@ descScriptTemplate:
   description: Description of script template section.
   message: >-
     Obsługiwane zmienne: <{{name}}>, <{{url}}>, <{{icon}}>, <{{date}}>,
-    <{{date:format}}> w formacie zgodnym z MomentJS, np <{{date:YYYY-MM-DD}}>.
+    <{{date:format}}> w formacie zgodnym z MomentJS, np. <{{date:YYYY-MM-DD}}>.
+descSyncGitRepoPreexisting:
+  description: >-
+    Note explaining the repository must already exist; Violentmonkey never
+    creates it.
+  message: >-
+    Repozytorium musi już istnieć — Violentmonkey nigdy go za Ciebie nie utworzy
+    ani nie zainicjuje.
 disabledScriptsGroup:
   description: 'Used as "Disabled scripts: group"'
   message: grupuj
@@ -207,7 +213,7 @@ editHelpKeyboard:
   message: 'Skróty klawiaturowe:'
 editHowToHint:
   description: The text of the how-to link in the editor header.
-  message: Użycie innego edytora?
+  message: Użyć innego edytora?
 editLabelMeta:
   description: Metadata section in settings tab of script editor.
   message: Niestandardowe metadane
@@ -353,6 +359,9 @@ hintGrantless:
 hintInputURL:
   description: Hint for a prompt box to input URL of a user script.
   message: 'Wprowadź adres URL:'
+hintInvalidCron:
+  description: Error shown for an invalid five-field cron expression
+  message: Nieprawidłowe 5-polowe wyrażenie cron
 hintRecycleBin:
   description: Hint for recycle bin.
   message: Usunięte skrypty są wymienione tutaj i będą przechowywane przez 7 dni.
@@ -406,6 +415,7 @@ labelAutoReloadCurrentTabDisabled:
 labelAutoUpdate:
   description: Option to allow automatically checking scripts for updates
   message: Sprawdzaj aktualizacje skryptów co $1 dni; użyj 0, aby wyłączyć
+  touched: false
 labelBackup:
   description: Label of the import/export section in settings.
   message: Kopia zapasowa
@@ -436,6 +446,30 @@ labelComment:
 labelContributors:
   description: Label for link to contributors.
   message: Współtwórcy
+labelCronDaily:
+  description: Shortcut for a daily cron schedule.
+  message: codziennie
+labelCronDayOfMonth:
+  description: Label for the day-of-month field in a cron expression.
+  message: Dzień miesiąca
+labelCronDayOfWeek:
+  description: Label for the day-of-week field in a cron expression.
+  message: Dzień tygodnia
+labelCronHour:
+  description: Label for the hour field in a cron expression.
+  message: Godzina
+labelCronHourly:
+  description: Shortcut for an hourly cron schedule.
+  message: co godzinę
+labelCronMinute:
+  description: Label for the minute field in a cron expression.
+  message: Minuta
+labelCronMonth:
+  description: Label for the month field in a cron expression.
+  message: Miesiąc
+labelCronTwiceADay:
+  description: Shortcut for a cron schedule that runs twice a day.
+  message: dwa razy dziennie
 labelCurrentLang:
   description: Label of current language.
   message: 'Używany język: '
@@ -584,7 +618,7 @@ labelName:
   message: 'Nazwa skryptu:'
 labelNoFrames:
   description: Label of script @noframes properties in custom meta data.
-  message: 'Uruchom w ramkach:'
+  message: 'Uruchom w ramkach: '
 labelNoName:
   description: Text as the name of a script when no @name is assigned.
   message: Bez nazwy
@@ -621,7 +655,7 @@ labelRelated:
   message: 'Powiązane linki: '
 labelRemovedAt:
   description: Label for the time when the script is removed.
-  message: 'Usunięto  $1 '
+  message: Usunięto $1
 labelReplace:
   description: Label for replace input in search box.
   message: 'Zamień na: '
@@ -673,6 +707,29 @@ labelSyncAutomatically:
 labelSyncDisabled:
   description: Label for option to disable sync service.
   message: Żaden
+labelSyncGitApiBase:
+  description: Label for the Git API base URL input (GitHub/GHES/Gitea/Forgejo).
+  message: 'Bazowy adres URL API: '
+labelSyncGitBranch:
+  description: Label for the Git branch input.
+  message: 'Gałąź:'
+labelSyncGitCreateMethod:
+  description: >-
+    Label for the Git file-creation-method select, matching the createMethod
+    option key.
+  message: 'Metoda tworzenia pliku:'
+labelSyncGitOwner:
+  description: Label for the Git repository owner input.
+  message: 'Właściciel:'
+labelSyncGitPathPrefix:
+  description: Label for the Git path-prefix input (folder within the repo).
+  message: 'Prefiks ścieżki:'
+labelSyncGitRepo:
+  description: Label for the Git repository name input.
+  message: 'Repozytorium:'
+labelSyncGitToken:
+  description: Label for the Git access token input.
+  message: 'Token dostępu:'
 labelSyncPassword:
   description: Label for input to hold password.
   message: 'Hasło:'
@@ -685,44 +742,56 @@ labelSyncRevoke:
   message: Unieważnij
 labelSyncS3AccessKeyId:
   description: Label for S3 access key ID input.
-  message: 'Identyfikator klucza dostępu:'
+  message: 'Identyfikator klucza dostępu: '
 labelSyncS3Bucket:
   description: Label for S3 bucket name input.
   message: 'Kontener: '
 labelSyncS3Endpoint:
   description: Label for custom S3-compatible endpoint URL input (leave blank for AWS).
-  message: 'Własny punkt końcowy:'
+  message: 'Własny punkt końcowy: '
 labelSyncS3Prefix:
   description: Label for S3 key prefix input (folder within the bucket).
-  message: 'Przedrostek klucza:'
+  message: 'Przedrostek klucza: '
 labelSyncS3Region:
   description: Label for S3 region input.
   message: 'Region: '
 labelSyncS3SecretAccessKey:
   description: Label for S3 secret access key input.
-  message: 'Tajny klucz dostępu:'
+  message: 'Tajny klucz dostępu: '
 labelSyncScriptStatus:
   description: Label for option to sync script status.
   message: Synchronizuj stan skryptu
 labelSyncServerUrl:
   description: Label for input to hold server URL.
-  message: 'Adres serwera:'
+  message: 'Adres URL serwera: '
 labelSyncService:
   description: Label for sync service select.
   message: Synchronizuj z
 labelSyncUsername:
   description: Label for input to hold username.
-  message: 'Nazwa użytkownika:'
+  message: 'Nazwa użytkownika: '
 labelTags:
   description: Label for custom tags. Don't translate @tag.
   message: '@tag / tagi'
 labelTheme:
   description: Label for the visual theme option.
-  message: 'Motyw:'
+  message: 'Motyw: '
 labelTranslator:
   description: Label of translator.
   message: 'Tłumacze: '
   touched: false
+labelUpdateCustom:
+  description: Option to enter a custom five-field cron expression for script update checks
+  message: Niestandardowe wyrażenie cron
+labelUpdateDaily:
+  description: Option to check for script updates every day at noon
+  message: Codziennie
+labelUpdateDisabled:
+  description: Option to disable automatic script update checks
+  message: Wyłączone
+labelUpdateSchedule:
+  description: Option to configure automatic script update checks
+  message: Sprawdź dostępność aktualizacji skryptów
 labelUpdateURL:
   description: Label of script @updateURL in custom meta data.
   message: 'Adres URL aktualizacji:'
@@ -916,6 +985,9 @@ msgReinstallScripts:
     Notification body shown for a missing @require or other resource when
     running such scripts.
   message: 'Zapisz ponownie lub przeinstaluj te skrypty:'
+msgRestartToUpdate:
+  description: $1 is the old version, $2 is the new version.
+  message: "Należy ponownie uruchomić Violentmonkey, aby zakończyć aktualizację z\_wersji $1 do $2."
 msgSameCode:
   description: Shown inside the title when re-installing a script that's already installed.
   message: (kod jest taki sam)
@@ -957,6 +1029,11 @@ msgSyncReady:
   description: Message shown when sync will start soon.
   message: Synchronizacja rozpocznie się wkrótce...
   touched: false
+msgSyncRepoNotFound:
+  description: >-
+    Message shown when the configured Git repository was not found, or the token
+    can't access it. Violentmonkey never creates it automatically.
+  message: "Nie znaleziono repozytorium. Najpierw je utwórz, a\_następnie upewnij się, że Twój token ma do niego dostęp."
 msgSyncing:
   description: Message shown when sync is in progress.
   message: Trwa synchronizacja...
@@ -1017,7 +1094,7 @@ optionPopupShowDisabled:
   touched: false
 optionShowEnabledFirst:
   description: Option to show enabled scripts first in alphabetical order.
-  message: Pokaź najpierw włączone skrypty
+  message: Pokaż najpierw włączone skrypty
 optionUiTheme:
   description: Label for the theme selector in Advanced settings.
   message: 'Motyw interfejsu:'
@@ -1088,7 +1165,7 @@ sideMenuInstalled:
   message: Zainstalowane skrypty
 sideMenuScripts:
   description: 'Side menu: Scripts'
-  message: Scripts
+  message: Skrypty
 sideMenuSettings:
   description: 'Side menu: Settings'
   message: Ustawienia
@@ -1143,6 +1220,19 @@ titleSearchHintV2:
 
     * Wyrażenia regularne: <code>/\w+?/</code>, <code>/\w+?/gi</code>,
     <code>name:/\w+?/</code>, <code>name+re:"\w+? with space"</code>
+titleSyncGitCreateMethod:
+  description: >-
+    Hover title for the Git file-creation-method select, explaining when to
+    change it.
+  message: >-
+    Jeśli synchronizacja nie powiedzie się podczas pierwszego tworzenia pliku,
+    spróbuj użyć drugiej metody.
+titleSyncGitPathPrefix:
+  description: Hover title for the Git path-prefix input, clarifying what it does.
+  message: "Synchronizuj z\_tym podkatalogiem repozytorium zamiast z\_jego katalogiem głównym. Opcjonalne."
+titleSyncGitToken:
+  description: Hover title for the Git access token input, clarifying required permissions.
+  message: "Wymaga uprawnień do odczytu i\_zapisu zawartości repozytorium (repozytorium musi już istnieć)."
 toggleInjection:
   description: Label for a keyboard shortcut.
   message: Przełącz tryb wstrzykiwania skryptu użytkownika
@@ -1171,6 +1261,12 @@ updateScriptsAll:
 updateScriptsInTab:
   description: Command/button to update scripts that run in current tab.
   message: Zaktualizuj skrypty bieżącej karty
+userScriptsPermissionNote:
+  description: Text in the popup or dashboard.
+  message: "Włącz opcję „Zezwalaj na skrypty użytkownika” w\_szczegółach Violentmonkey w\_chrome://extensions i\_odśwież kartę"
+userScriptsPermissionNoteOld:
+  description: Text in the popup or dashboard in older browsers.
+  message: "Włącz „Tryb dewelopera” w\_chrome://extensions i\_odśwież kartę"
 valueLabelKey:
   description: Label for key of a script value.
   message: Klucz (ciąg)

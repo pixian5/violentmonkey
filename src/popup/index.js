@@ -1,12 +1,12 @@
 import { i18n, sendCmdDirectly } from '@/common';
 import handlers from '@/common/handlers';
 import { loadCommandIcon, loadScriptIcon } from '@/common/load-script-icon';
-import { forEachValue, mapEntry } from '@/common/object';
 import { render } from '@/common/ui';
 import '@/common/ui/style';
 import App from './views/app';
 import { emptyStore, isFullscreenPopup, store } from './utils';
 
+let idMapMain, idMapFrames;
 let mutex, mutexResolve, port;
 let hPrev;
 
@@ -33,32 +33,29 @@ async function setPopup(data, { [kFrameId]: frameId, url }) {
   /* SetPopup from a sub-frame may come first so we need to wait for the main page
    * because we only show the iframe menu for unique scripts that don't run in the main page */
   const isTop = frameId === 0;
+  const dataIds = data[IDS];
   if (!data[MORE]) {
-    Object.assign(data[IDS], await sendCmdDirectly('GetMoreIds', {
+    Object.assign(dataIds, await sendCmdDirectly('GetMoreIds', {
       url,
       [kTop]: isTop,
-      [IDS]: data[IDS],
+      [IDS]: dataIds,
     }));
   }
   if (!isTop) await mutex;
   else {
     store[IS_APPLIED] = data[INJECT_INTO] !== 'off'; // isApplied at the time of GetInjected
   }
-  const depth = isTop ? 0 : 1;
-  const menus = Object.assign(store.menus[depth], data.menus);
-  const idMapAllFrames = store.idMap;
-  const idMapMain = idMapAllFrames[0] || (idMapAllFrames[0] = {});
-  const idMapOld = idMapAllFrames[frameId] || (idMapAllFrames[frameId] = {});
-  const idMap = data[IDS]::mapEntry(null, (id, val) => val !== idMapOld[id] && id);
-  const ids = Object.keys(idMap).map(Number);
+  let v;
+  const idMap = isTop ? idMapMain : idMapFrames;
+  const ids = Object.keys(dataIds)
+    .map(id => (v = dataIds[id]) !== idMap[id] && (idMap[id] = v, +id))
+    .filter(Boolean);
   if (ids.length) {
-    Object.assign(idMapOld, idMap);
-    const scope = store[SCRIPTS][depth];
+    const scope = store[SCRIPTS][isTop ? 0 : 1];
     const { grantless } = data;
     const metas = data[SCRIPTS]?.filter(({ props: { id } }) => ids.includes(id))
       || (Object.assign(data, await sendCmdDirectly('GetData', { ids })))[SCRIPTS];
     metas.forEach(script => {
-      let v;
       const { id } = script.props;
       const state = idMap[id];
       const content = script.c = state === CONTENT && state;
@@ -87,10 +84,18 @@ async function setPopup(data, { [kFrameId]: frameId, url }) {
         store.injectionFailure = { fixable: data[INJECT_INTO] === PAGE };
       }
       loadScriptIcon(script, data);
-      menus[id]::forEachValue(cmd => {
-        loadCommandIcon(cmd, store);
-      });
     });
+  }
+  for (const id in data.menus) {
+    const cmds = data.menus[id];
+    const scope = store[SCRIPTS][isTop || id in idMapMain ? 0 : 1];
+    const script = scope.find(({ props }) => props.id === +id) || {};
+    const menu = script.cmds = new Map();
+    for (const cmd in cmds) {
+      v = cmds[cmd];
+      menu.set(cmd, v);
+      loadCommandIcon(v, store);
+    }
   }
   if (isTop) mutexResolve(); // resolving at the end after all `await` above are settled
   if (!hPrev) {
@@ -111,6 +116,8 @@ function initMutex(delay = 100) {
 
 async function initialize() {
   initMutex();
+  idMapMain = {};
+  idMapFrames = {};
   Object.assign(store, emptyStore());
   const response = BGDATA.popup || await sendCmdDirectly('InitPopup');
   let [cached, data, failureInfo] = Array.isArray(response) ? response : [];

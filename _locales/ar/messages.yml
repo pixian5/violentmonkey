@@ -63,6 +63,9 @@ buttonInstallOptions:
 buttonNew:
   description: Button to create a new script.
   message: جديد
+buttonNewFromFile:
+  description: Button to create a new script from a local file.
+  message: جديد من الملف
 buttonOK:
   description: OK button on dialog.
   message: موافق
@@ -186,6 +189,13 @@ descScriptTemplate:
     المتغيرات المدعومة: <{{name}}>, <{{url}}>, <{{icon}}>, <{{date}}>,
     <{{date:format}}> بصيغة متوافقة مع MomentJS، على سبيل المثال
     <{{date:YYYY-MM-DD}}>.
+descSyncGitRepoPreexisting:
+  description: >-
+    Note explaining the repository must already exist; Violentmonkey never
+    creates it.
+  message: >-
+    يجب أن يكون المستودع موجودًا بالفعل — لا يقوم Violentmonkey أبدًا بإنشائه أو
+    تهيئته نيابةً عنك.
 disabledScriptsGroup:
   description: 'Used as "Disabled scripts: group"'
   message: مجموعة
@@ -350,6 +360,9 @@ hintGrantless:
 hintInputURL:
   description: Hint for a prompt box to input URL of a user script.
   message: 'أدخل عنوان URL:'
+hintInvalidCron:
+  description: Error shown for an invalid five-field cron expression
+  message: تعبير cron غير صالح المكوَّن من 5 حقول
 hintRecycleBin:
   description: Hint for recycle bin.
   message: السكربتات المحذوفة مدرجة هنا وستُحتفظ بها لمدة 7 أيام.
@@ -399,6 +412,7 @@ labelAutoReloadCurrentTabDisabled:
 labelAutoUpdate:
   description: Option to allow automatically checking scripts for updates
   message: التحقق من تحديثات السكربتات كل $1 يوم/أيام، استخدم 0 لتعطيل الميزة
+  touched: false
 labelBackup:
   description: Label of the import/export section in settings.
   message: النسخ الاحتياطي
@@ -429,6 +443,30 @@ labelComment:
 labelContributors:
   description: Label for link to contributors.
   message: المساهمون
+labelCronDaily:
+  description: Shortcut for a daily cron schedule.
+  message: يوميًا
+labelCronDayOfMonth:
+  description: Label for the day-of-month field in a cron expression.
+  message: يوم الشهر
+labelCronDayOfWeek:
+  description: Label for the day-of-week field in a cron expression.
+  message: يوم الأسبوع
+labelCronHour:
+  description: Label for the hour field in a cron expression.
+  message: ساعة
+labelCronHourly:
+  description: Shortcut for an hourly cron schedule.
+  message: كل ساعة
+labelCronMinute:
+  description: Label for the minute field in a cron expression.
+  message: دقيقة
+labelCronMonth:
+  description: Label for the month field in a cron expression.
+  message: شهر
+labelCronTwiceADay:
+  description: Shortcut for a cron schedule that runs twice a day.
+  message: مرتين يومياً
 labelCurrentLang:
   description: Label of current language.
   message: 'اللغة الحالية: '
@@ -661,6 +699,29 @@ labelSyncAutomatically:
 labelSyncDisabled:
   description: Label for option to disable sync service.
   message: بدون
+labelSyncGitApiBase:
+  description: Label for the Git API base URL input (GitHub/GHES/Gitea/Forgejo).
+  message: 'عنوان URL الأساسي لواجهة API:'
+labelSyncGitBranch:
+  description: Label for the Git branch input.
+  message: 'الفرع:'
+labelSyncGitCreateMethod:
+  description: >-
+    Label for the Git file-creation-method select, matching the createMethod
+    option key.
+  message: 'طريقة إنشاء الملف:'
+labelSyncGitOwner:
+  description: Label for the Git repository owner input.
+  message: 'المالك:'
+labelSyncGitPathPrefix:
+  description: Label for the Git path-prefix input (folder within the repo).
+  message: 'بادئة المسار: '
+labelSyncGitRepo:
+  description: Label for the Git repository name input.
+  message: 'المستودع:'
+labelSyncGitToken:
+  description: Label for the Git access token input.
+  message: 'رمز الوصول:'
 labelSyncPassword:
   description: Label for input to hold password.
   message: 'كلمة المرور: '
@@ -711,6 +772,18 @@ labelTranslator:
   description: Label of translator.
   message: ''
   touched: false
+labelUpdateCustom:
+  description: Option to enter a custom five-field cron expression for script update checks
+  message: Custom cron expression
+labelUpdateDaily:
+  description: Option to check for script updates every day at noon
+  message: يوميًا
+labelUpdateDisabled:
+  description: Option to disable automatic script update checks
+  message: معطّل
+labelUpdateSchedule:
+  description: Option to configure automatic script update checks
+  message: التحقق من تحديثات السكربت
 labelUpdateURL:
   description: Label of script @updateURL in custom meta data.
   message: 'عنوان التحديث:'
@@ -906,6 +979,9 @@ msgReinstallScripts:
     Notification body shown for a missing @require or other resource when
     running such scripts.
   message: 'يرجى إعادة الحفظ أو إعادة تثبيت هذه السكربتات:'
+msgRestartToUpdate:
+  description: $1 is the old version, $2 is the new version.
+  message: يجب إعادة تشغيل Violentmonkey لإكمال التحديث من$1 إلى $2.
 msgSameCode:
   description: Shown inside the title when re-installing a script that's already installed.
   message: ' (الكود نفسه)'
@@ -947,6 +1023,13 @@ msgSyncReady:
   description: Message shown when sync will start soon.
   message: ستبدأ المزامنة قريبًا...
   touched: false
+msgSyncRepoNotFound:
+  description: >-
+    Message shown when the configured Git repository was not found, or the token
+    can't access it. Violentmonkey never creates it automatically.
+  message: >-
+    لم يتم العثور على المستودع. قم بإنشائه أولاً، ثم تأكد من أن رمز الوصول الخاص
+    بك لديه صلاحية الوصول إليه.
 msgSyncing:
   description: Message shown when sync is in progress.
   message: المزامنة قيد التنفيذ...
@@ -1126,6 +1209,19 @@ titleSearchHintV2:
 
     * التعبيرات النمطية: <code>/\w+?/</code>, <code>/\w+?/gi</code>,
     <code>name:/\w+?/</code>, <code>name+re:"\w+? with space"</code>
+titleSyncGitCreateMethod:
+  description: >-
+    Hover title for the Git file-creation-method select, explaining when to
+    change it.
+  message: إذا فشلت المزامنة عند إنشاء الملف لأول مرة، جرّب الطريقة الأخرى.
+titleSyncGitPathPrefix:
+  description: Hover title for the Git path-prefix input, clarifying what it does.
+  message: المزامنة إلى هذا المجلد الفرعي داخل المستودع بدلاً من جذره. اختياري.
+titleSyncGitToken:
+  description: Hover title for the Git access token input, clarifying required permissions.
+  message: >-
+    يحتاج إلى صلاحية قراءة/كتابة لمحتويات المستودع (يجب أن يكون المستودع موجودًا
+    بالفعل).
 toggleInjection:
   description: Label for a keyboard shortcut.
   message: تبديل حقن سكربتات المستخدم
@@ -1152,6 +1248,14 @@ updateScriptsAll:
 updateScriptsInTab:
   description: Command/button to update scripts that run in current tab.
   message: تحديث سكربتات علامة التبويب الحالية
+userScriptsPermissionNote:
+  description: Text in the popup or dashboard.
+  message: >-
+    يرجى تمكين "السماح بسكربتات المستخدم" في تفاصيل Violentmonkey عبر
+    chrome://extensions وإعادة تحميل علامة التبويب.
+userScriptsPermissionNoteOld:
+  description: Text in the popup or dashboard in older browsers.
+  message: يرجى تفعيل "وضع المطور" في chrome://extensions وإعادة تحميل علامة التبويب
 valueLabelKey:
   description: Label for key of a script value.
   message: المفتاح (نص)

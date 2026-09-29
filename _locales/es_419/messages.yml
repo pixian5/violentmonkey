@@ -62,7 +62,10 @@ buttonInstallOptions:
   touched: false
 buttonNew:
   description: Button to create a new script.
-  message: Nuevo script
+  message: Nuevo
+buttonNewFromFile:
+  description: Button to create a new script from a local file.
+  message: Nuevo desde un archivo
 buttonOK:
   description: OK button on dialog.
   message: Aceptar
@@ -189,6 +192,13 @@ descScriptTemplate:
     Variables compatibles: <{{name}}>, <{{url}}>, <{{icon}}>, <{{date}}>,
     <{{date:format}}> con un formato compatible con MomentJS, por ejemplo
     <{{date:YYYY-MM-DD}}>.
+descSyncGitRepoPreexisting:
+  description: >-
+    Note explaining the repository must already exist; Violentmonkey never
+    creates it.
+  message: >-
+    El repositorio debe existir previamente — Violentmonkey nunca lo crea ni lo
+    inicializa por ti.
 disabledScriptsGroup:
   description: 'Used as "Disabled scripts: group"'
   message: agrupar
@@ -282,8 +292,8 @@ fileInstallBlocked:
 fileInstallBlockedFF:
   description: Text in the installer when a local file is dropped into Firefox window.
   message: >-
-    Abre about:addons, selecciona “Violentmonkey”, entra en “Permisos y datos” y
-    activa la opción “Acceso a archivos locales en tu computadora”.
+    Abre about:addons, selecciona "Violentmonkey", entra en "Permisos y datos" y
+    activa la opción "Acceso a archivos locales en tu computadora".
 filterAlphabeticalOrder:
   description: Label for option to sort scripts in alphabetical order.
   message: alfabéticamente
@@ -356,6 +366,9 @@ hintGrantless:
 hintInputURL:
   description: Hint for a prompt box to input URL of a user script.
   message: 'Ingresa la URL:'
+hintInvalidCron:
+  description: Error shown for an invalid five-field cron expression
+  message: Expresión cron de 5 campos no válida
 hintRecycleBin:
   description: Hint for recycle bin.
   message: Los scripts eliminados se muestran aquí y se conservarán durante 7 días.
@@ -413,6 +426,7 @@ labelAutoUpdate:
   message: >-
     Buscar actualizaciones de los scripts cada $1 día(s), usa 0 para
     deshabilitar
+  touched: false
 labelBackup:
   description: Label of the import/export section in settings.
   message: Respaldo
@@ -443,6 +457,30 @@ labelComment:
 labelContributors:
   description: Label for link to contributors.
   message: Colaboradores
+labelCronDaily:
+  description: Shortcut for a daily cron schedule.
+  message: diario
+labelCronDayOfMonth:
+  description: Label for the day-of-month field in a cron expression.
+  message: Día del mes
+labelCronDayOfWeek:
+  description: Label for the day-of-week field in a cron expression.
+  message: Día de la semana
+labelCronHour:
+  description: Label for the hour field in a cron expression.
+  message: Hora
+labelCronHourly:
+  description: Shortcut for an hourly cron schedule.
+  message: cada hora
+labelCronMinute:
+  description: Label for the minute field in a cron expression.
+  message: Minuto
+labelCronMonth:
+  description: Label for the month field in a cron expression.
+  message: Mes
+labelCronTwiceADay:
+  description: Shortcut for a cron schedule that runs twice a day.
+  message: dos veces al día
 labelCurrentLang:
   description: Label of current language.
   message: 'Idioma actual: '
@@ -494,16 +532,16 @@ labelFastInject:
 labelFastInjectHint:
   description: Tooltip hint for the option in Advanced settings.
   message: >-
-    Un método de inyección alternativo para scripts <document-start> disponible,
-    más rápido que el modo predeterminado. Al igual que el "modo page
-    sincrónico", también incrementa el uso de memoria, por lo que podrías
-    desactivarlo si tus scripts funcionan correctamente sin esta opción.
+    Un método de inyección alternativo para scripts <document-start>, más rápido
+    que el modo predeterminado. Al igual que el "modo page sincrónico", también
+    incrementa el uso de memoria, por lo que podrías desactivarlo si tus scripts
+    funcionan correctamente sin esta opción.
 labelFeedback:
   description: Label of link to feedback page.
   message: Comentarios
 labelFirefoxPatchCsp:
   description: Option in Advanced settings.
-  message: 'Omitir CSP en Firefox '
+  message: Omitir CSP en Firefox
 labelFirefoxPatchCspHint:
   description: >-
     (`$1` will be shown as <page>, $2 is <wrappedJSObject>) Hint for the option
@@ -678,6 +716,29 @@ labelSyncAutomatically:
 labelSyncDisabled:
   description: Label for option to disable sync service.
   message: Nada
+labelSyncGitApiBase:
+  description: Label for the Git API base URL input (GitHub/GHES/Gitea/Forgejo).
+  message: 'URL base de la API: '
+labelSyncGitBranch:
+  description: Label for the Git branch input.
+  message: 'Rama: '
+labelSyncGitCreateMethod:
+  description: >-
+    Label for the Git file-creation-method select, matching the createMethod
+    option key.
+  message: 'Método de creación de archivos: '
+labelSyncGitOwner:
+  description: Label for the Git repository owner input.
+  message: 'Propietario: '
+labelSyncGitPathPrefix:
+  description: Label for the Git path-prefix input (folder within the repo).
+  message: 'Prefijo de ruta: '
+labelSyncGitRepo:
+  description: Label for the Git repository name input.
+  message: 'Repositorio: '
+labelSyncGitToken:
+  description: Label for the Git access token input.
+  message: 'Token de acceso: '
 labelSyncPassword:
   description: Label for input to hold password.
   message: 'Contraseña: '
@@ -696,13 +757,13 @@ labelSyncS3Bucket:
   message: 'Bucket: '
 labelSyncS3Endpoint:
   description: Label for custom S3-compatible endpoint URL input (leave blank for AWS).
-  message: 'Endpoint personalizado:'
+  message: 'Endpoint personalizado: '
 labelSyncS3Prefix:
   description: Label for S3 key prefix input (folder within the bucket).
   message: 'Prefijo de clave: '
 labelSyncS3Region:
   description: Label for S3 region input.
-  message: 'Región:'
+  message: 'Región: '
 labelSyncS3SecretAccessKey:
   description: Label for S3 secret access key input.
   message: 'Clave secreta de acceso: '
@@ -728,6 +789,18 @@ labelTranslator:
   description: Label of translator.
   message: 'Traductor: '
   touched: false
+labelUpdateCustom:
+  description: Option to enter a custom five-field cron expression for script update checks
+  message: Expresión cron personalizada
+labelUpdateDaily:
+  description: Option to check for script updates every day at noon
+  message: Diario
+labelUpdateDisabled:
+  description: Option to disable automatic script update checks
+  message: Desactivado
+labelUpdateSchedule:
+  description: Option to configure automatic script update checks
+  message: Buscar actualizaciones del script
 labelUpdateURL:
   description: Label of script @updateURL in custom meta data.
   message: 'URL de actualización:'
@@ -922,6 +995,11 @@ msgReinstallScripts:
     Notification body shown for a missing @require or other resource when
     running such scripts.
   message: 'Vuelve a guardar o reinstala estos scripts:'
+msgRestartToUpdate:
+  description: $1 is the old version, $2 is the new version.
+  message: >-
+    Es necesario reiniciar Violentmonkey para completar la actualización de $1 a
+    $2.
 msgSameCode:
   description: Shown inside the title when re-installing a script that's already installed.
   message: ' (el código es el mismo)'
@@ -963,6 +1041,13 @@ msgSyncReady:
   description: Message shown when sync will start soon.
   message: La sincronización iniciará pronto...
   touched: false
+msgSyncRepoNotFound:
+  description: >-
+    Message shown when the configured Git repository was not found, or the token
+    can't access it. Violentmonkey never creates it automatically.
+  message: >-
+    Repositorio no encontrado. Créalo primero y asegúrate de que tu token tenga
+    acceso a él.
 msgSyncing:
   description: Message shown when sync is in progress.
   message: Sincronización en progreso...
@@ -1148,6 +1233,23 @@ titleSearchHintV2:
 
     * Expresiones regulares: <code>/\w+?/</code>, <code>/\w+?/gi</code>,
     <code>name:/\w+?/</code>, <code>name+re:"\w+? with space"</code>
+titleSyncGitCreateMethod:
+  description: >-
+    Hover title for the Git file-creation-method select, explaining when to
+    change it.
+  message: >-
+    Si la sincronización falla al crear el archivo por primera vez, prueba el
+    otro método.
+titleSyncGitPathPrefix:
+  description: Hover title for the Git path-prefix input, clarifying what it does.
+  message: >-
+    Sincroniza dentro de esta subcarpeta del repositorio en lugar de en su raíz.
+    Opcional.
+titleSyncGitToken:
+  description: Hover title for the Git access token input, clarifying required permissions.
+  message: >-
+    Requiere acceso de lectura y escritura al contenido del repositorio (el
+    repositorio debe existir previamente).
 toggleInjection:
   description: Label for a keyboard shortcut.
   message: Activar o desactivar inyección de userscripts
@@ -1176,6 +1278,16 @@ updateScriptsAll:
 updateScriptsInTab:
   description: Command/button to update scripts that run in current tab.
   message: Actualizar scripts de la pestaña actual
+userScriptsPermissionNote:
+  description: Text in the popup or dashboard.
+  message: >-
+    Activa la opción "Permitir scripts de usuario" en los detalles de
+    Violentmonkey en chrome://extensions y recarga la pestaña
+userScriptsPermissionNoteOld:
+  description: Text in the popup or dashboard in older browsers.
+  message: >-
+    Activa la opción "Modo desarrollador" en chrome://extensions y recarga la
+    pestaña
 valueLabelKey:
   description: Label for key of a script value.
   message: Clave (cadena)

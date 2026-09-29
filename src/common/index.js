@@ -29,8 +29,12 @@ export function initHooks() {
 
 
 /** @return {chrome.tabs.Tab | void} */
-export function getTab(tabId) {
-  return browser.tabs.get(tabId).catch(noop);
+export async function getTab(tabId) {
+  try {
+    return await browser.tabs.get(tabId);
+  } catch {
+    // Also throws synchronously if tabId is not a valid integer.
+  }
 }
 
 /** @return {Promise<chrome.tabs.Tab | void>} */
@@ -44,38 +48,4 @@ export async function getActiveTab(windowId) {
     [res] = await browser.tabs.query({ active: true, [kWindowId]: res.id });
   }
   return res;
-}
-
-let keepAliveChain, keepAliveTimer;
-
-/**
- * @template T
- * @param {T} [promise]
- * @return {T | ((v?: any) => void)} original promise or a new promise's resolver
- */
-export function keepAlive(promise) {
-  let res = promise;
-  if (!res) ({promise, resolve: res} = Promise.withResolvers());
-  const chain = keepAliveChain = keepAliveChain ? keepAliveChain.finally(() => promise) : promise;
-  keepAliveChain.finally(() => {
-    if (keepAliveChain === chain) {
-      clearInterval(keepAliveTimer);
-      keepAliveChain = keepAliveTimer = 0;
-    }
-  });
-  keepAliveTimer ||= setInterval(chrome.runtime.getPlatformInfo, 25e3);
-  return res;
-}
-
-/**
- * @template T
- * @param {number} [ms]
- * @param {T} [arg] - resolved value of the Promise
- * @return {Promise<T>}
- */
-export function makePause(ms, arg) {
-  const res = ms < 0
-    ? Promise.resolve(arg)
-    : new Promise(resolve => setTimeout(resolve, ms, arg));
-  return __.SW && ms > 0 ? keepAlive(res) : res;
 }
