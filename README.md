@@ -15,6 +15,17 @@ the extension in `dist/`. Do not run `macos:*`, `safari:*`, Electron packaging,
 or host-app installation unless a separate request explicitly asks for a host
 application.
 
+## 当前开发进度
+
+- 已合并上游 2026-09-29 同步逻辑更新；MV2/MV3 构建及 71 项自动测试通过。
+- [查看详细进度](docs/20260929235346-当前开发进度.md)
+
+## 下一步待实现
+
+- 先在隔离测试账户验证新同步逻辑，再测试真实用户脚本注入，并确定“外挂式”功能边界。
+- [查看下一步计划](docs/20260929235346-下一步待实现.md)
+- [查看上游合并与外挂式方案分析](docs/20260929235346-上游同步与外挂式方案分析.md)
+
 More details can be found [here](https://violentmonkey.github.io/).
 
 Join our Discord server:
