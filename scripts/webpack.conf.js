@@ -39,8 +39,6 @@ const pickEnvs = (items) => {
 
 const defsObj = {
   ...pickEnvs([
-    'DEBUG',
-    'TARGET',
     'VM_VER',
     'SYNC_GOOGLE_DESKTOP_ID',
     'SYNC_GOOGLE_DESKTOP_SECRET',

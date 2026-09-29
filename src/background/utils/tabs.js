@@ -4,7 +4,7 @@ import { addOwnCommands, addPublicCommands, commands, init } from './init';
 import { getOption } from './options';
 import sessionData, { flushSession, kTabOpeners, tabOpeners } from './session-data';
 import { testScript } from './tester';
-import { CHROME, FIREFOX } from './ua';
+import { CHROME } from './ua';
 import { vetUrl } from './url';
 
 const openerTabIdSupported = !IS_FIREFOX // supported in Chrome
@@ -205,12 +205,8 @@ tabsOnRemoved.addListener(async (id) => {
 (async () => {
   // FF68+ can't fetch file:// from extension context but it runs content scripts in file:// tabs
   const fileScheme = IS_FIREFOX
-    || await new Promise(r => {
-      const fn = globalThis.chrome?.extension?.isAllowedFileSchemeAccess;
-      if (fn == null) return r(false);
-      fn(r);
-    });
-  fileSchemeRequestable = FIREFOX < 68 || !IS_FIREFOX && fileScheme;
+    || await new Promise(r => chrome.extension.isAllowedFileSchemeAccess(r));
+  fileSchemeRequestable = !IS_FIREFOX && fileScheme;
   // Since users in FF can override UA we detect FF 90 via feature
   if (IS_FIREFOX && [].at || CHROME >= 88) {
     injectableRe = fileScheme ? /^(https?|file):/ : /^https?:/;
@@ -239,11 +235,10 @@ export async function forEachTab(callback, ...args) {
  */
 export async function openDashboard(route, src) {
   const url = extensionOptionsPage + (route ? '#' + route : '');
-  for (const tab of await browser.tabs.query({})) {
+  for (const tab of await browser.tabs.query({ url: extensionOptionsPage })) {
     const tabUrl = tab.url;
     // query() can't handle #hash so it returns tabs both with #hash and without it
-    if (tabUrl?.startsWith(extensionOptionsPage)
-    && (tabUrl === url || !route && tabUrl === url + ROUTE_SCRIPTS)) {
+    if (tabUrl === url || !route && tabUrl === url + ROUTE_SCRIPTS) {
       browserWindows?.update(tab[kWindowId], { focused: true });
       return browser.tabs.update(tab.id, { active: true });
     }

@@ -27,7 +27,6 @@ export function initHooks() {
   };
 }
 
-
 /** @return {chrome.tabs.Tab | void} */
 export async function getTab(tabId) {
   try {

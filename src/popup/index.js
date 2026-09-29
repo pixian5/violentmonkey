@@ -1,3 +1,4 @@
+import '@/fork';
 import { i18n, sendCmdDirectly } from '@/common';
 import handlers from '@/common/handlers';
 import { loadCommandIcon, loadScriptIcon } from '@/common/load-script-icon';
@@ -119,12 +120,8 @@ async function initialize() {
   idMapMain = {};
   idMapFrames = {};
   Object.assign(store, emptyStore());
-  const response = BGDATA.popup || await sendCmdDirectly('InitPopup');
-  let [cached, data, failureInfo] = Array.isArray(response) ? response : [];
-  let [failure, reason, reason2] = Array.isArray(failureInfo)
-    ? failureInfo
-    : failureInfo == null ? [] : [failureInfo];
-  data ||= {};
+  let [cached, data, [failure, reason, reason2]] = BGDATA.popup
+    || await sendCmdDirectly('InitPopup');
   if (!reason) {
     failure = '';
   } else if (reason === INJECT_INTO) {
@@ -146,7 +143,7 @@ async function initialize() {
     for (const id in cached) setPopup(...cached[id]);
   }
   if (!port) {
-    port = browser.runtime.connect({ name: `Popup:${cached ? 'C' : ''}:${data.tab?.id ?? ''}` });
+    port = browser.runtime.connect({ name: `Popup:${cached ? 'C' : ''}:${data.tab.id}` });
     port.onMessage.addListener(initialize); // for non-injectable tab
   }
 }

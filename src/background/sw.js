@@ -1,3 +1,4 @@
+import '@/fork/background';
 import { registerInjector } from '@/common/browser-scripts-api';
 import { TLDJS } from '@/common/consts';
 import { onClientMessage } from '@/common/messaging-sw';

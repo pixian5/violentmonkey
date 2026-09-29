@@ -41,7 +41,7 @@ const API_FILTER = {
 };
 const EXTRA_HEADERS = [
   !__.MV3 && 'blocking',
-  browser.webRequest?.OnBeforeSendHeadersOptions?.EXTRA_HEADERS,
+  browser.webRequest.OnBeforeSendHeadersOptions.EXTRA_HEADERS,
 ].filter(Boolean);
 const headersToInject = {};
 export const kCookie = 'cookie';

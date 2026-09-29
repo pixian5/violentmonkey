@@ -87,9 +87,9 @@ class Locales {
   }
 
   async load() {
-    const langs = (await fs.readdir(this.base, { withFileTypes: true }))
-    .filter(entry => entry.isDirectory())
-    .map(entry => entry.name);
+    // macOS 的 Finder 会在 _locales 下生成 .DS_Store，只枚举语言目录，否则会中断构建
+    const entries = await fs.readdir(this.base, { withFileTypes: true });
+    const langs = entries.filter(entry => entry.isDirectory()).map(entry => entry.name);
     this.langs = langs;
     await Promise.all(langs.map(async lang => {
       const locale = new Locale(lang, this.base);

@@ -12,6 +12,7 @@ import { clearNotifications } from './notifications';
 import { getOption, hookOptionsInit } from './options';
 import { addMenuConfig } from './page-menu-commands';
 import { onPermissionChanged, permissionDownloads } from './permissions';
+import { IS_SAFARI } from '@/fork/target';
 import { normalizeRealm, prepare, prepareXhrBlob } from './preinject-prepare';
 import { clearRequestsByTabId } from './requests';
 import { kSetCookie } from './requests-core';
@@ -20,8 +21,6 @@ import { S_CACHE_PRE, S_CODE_PRE, S_REQUIRE_PRE, S_SCRIPT_PRE, S_VALUE_PRE } fro
 import { clearStorageCache } from './storage-cache';
 import { forEachTab, tabsOnRemoved } from './tabs';
 import { clearValueOpener } from './values';
-
-const IS_SAFARI = __.TARGET === 'safari';
 
 export let isApplied;
 export let injectInto;
@@ -33,8 +32,8 @@ export let lastRegDuration = 0;
 export let lastRegTime = 0;
 let xhrInjectKey;
 
-const API_HEADERS_RECEIVED = browser.webRequest?.onHeadersReceived;
-const API_XHR = __.MV3 ? browser.webRequest?.onBeforeRequest : API_HEADERS_RECEIVED;
+const API_HEADERS_RECEIVED = browser.webRequest.onHeadersReceived;
+const API_XHR = __.MV3 ? browser.webRequest.onBeforeRequest : API_HEADERS_RECEIVED;
 export const makeXhrHeader = (key, blobUrl) => ({
   [key]: kSetCookie,
   value: `${xhrInjectKey}=${blobUrl.split('/').pop()}; SameSite=Lax`,
@@ -44,9 +43,9 @@ const API_CONFIG = {
   types: [kMainFrame, kSubFrame],
 };
 const API_EXTRA = [
-  !__.MV3 && !IS_SAFARI && 'blocking', // used for xhrInject and to make Firefox fire the event before GetInjected
+  !__.MV3 && 'blocking', // used for xhrInject and to make Firefox fire the event before GetInjected
   kResponseHeaders,
-  browser.webRequest?.OnHeadersReceivedOptions?.EXTRA_HEADERS,
+  browser.webRequest.OnHeadersReceivedOptions.EXTRA_HEADERS,
 ].filter(Boolean);
 const findCspHeader = h => h.name.toLowerCase() === 'content-security-policy';
 const CSP_RE = /(?:^|[;,])\s*(?:script-src(-elem)?|(d)efault-src)(\s+[^;,]+)/g;
@@ -93,9 +92,9 @@ const OPT_HANDLERS = {
     cache.destroy();
     if (injectInto) { // already initialized, so we should update the listener
       if (value === CONTENT) {
-        API_HEADERS_RECEIVED?.removeListener(onHeadersReceived);
+        API_HEADERS_RECEIVED.removeListener(onHeadersReceived);
       } else if (isApplied && IS_FIREFOX && !xhrInject) {
-        API_HEADERS_RECEIVED?.addListener(onHeadersReceived, API_CONFIG, API_EXTRA);
+        API_HEADERS_RECEIVED.addListener(onHeadersReceived, API_CONFIG, API_EXTRA);
       }
     }
     injectInto = value;
@@ -141,7 +140,7 @@ function onOptionChanged(changes) {
 }
 
 function toggleXhrInject(enable) {
-  if (IS_SAFARI) {
+  if (IS_SAFARI) { // Safari 无法通过 cookie 传递 blob 注入数据
     xhrInject = false;
     return;
   }
@@ -150,9 +149,9 @@ function toggleXhrInject(enable) {
   xhrInject = enable;
   xhrInjectKey ??= extensionRoot.match(XHR_COOKIE_RE)[1];
   cache.destroy();
-  API_XHR?.removeListener(onHeadersReceived);
+  API_XHR.removeListener(onHeadersReceived);
   if (enable) {
-    API_XHR?.addListener(onHeadersReceived, API_CONFIG, __.MV3 ? undefined : API_EXTRA);
+    API_XHR.addListener(onHeadersReceived, API_CONFIG, __.MV3 ? undefined : API_EXTRA);
   } else if (__.MV3) {
     revokeBlobRules();
   }
@@ -164,13 +163,13 @@ function togglePreinject(enable) {
   // And even in Chrome a site may be so fast that preinject on onHeadersReceived won't be useful.
   const onOff = `${enable ? 'add' : 'remove'}Listener`;
   const config = enable ? API_CONFIG : undefined;
-  browser.webRequest?.onSendHeaders?.[onOff](onSendHeaders, config);
+  browser.webRequest.onSendHeaders[onOff](onSendHeaders, config);
   if (!isApplied /* remove the listener */
   || IS_FIREFOX && !xhrInject && injectInto !== CONTENT /* add 'nonce' detector */) {
-    API_HEADERS_RECEIVED?.[onOff](onHeadersReceived, config, config && API_EXTRA);
+    API_HEADERS_RECEIVED[onOff](onHeadersReceived, config, config && API_EXTRA);
   }
   tabsOnRemoved[onOff](onTabRemoved);
-  browser.tabs.onReplaced?.[onOff](onTabReplaced);
+  browser.tabs.onReplaced[onOff](onTabReplaced);
   if (!enable) {
     cache.destroy();
     clearFrameData();

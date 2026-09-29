@@ -1,4 +1,4 @@
-import wrapActionApi from '@/background/utils/action-api';
+import wrapActionApi from '@/fork/action-api';
 
 const METHODS = ['setIcon', 'setBadgeText', 'setBadgeBackgroundColor', 'setTitle'];
 

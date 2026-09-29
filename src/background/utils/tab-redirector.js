@@ -120,7 +120,7 @@ tabsOnUpdated.addListener(async (tabId, { url }, tab) => {
   }
 }, !__.MV3 && FIREFOX && { properties: [FIREFOX >= 88 ? 'url' : 'status'] });
 
-browser.webRequest?.onBeforeRequest?.addListener((req) => {
+browser.webRequest.onBeforeRequest.addListener((req) => {
   const { method, tabId, url } = req;
   if (method !== 'GET') {
     return;

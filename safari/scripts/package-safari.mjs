@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { applySafariManifestOverrides } from '../manifest-overrides.js';
 
 const projectRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const buildRoot = path.join(projectRoot, 'build', 'safari');
@@ -50,7 +51,16 @@ function detectTeamId(identity) {
   return result.stdout.match(/OU=([A-Z0-9]+)/)?.[1] || null;
 }
 
+/** Safari 不支持部分权限与键，转换前先按 Safari 规则改写 dist/manifest.json */
+function adaptManifestForSafari() {
+  const manifestPath = path.join(distPath, 'manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  fs.writeFileSync(manifestPath, `${JSON.stringify(applySafariManifestOverrides(manifest), null, 2)}\n`);
+  console.log('Adapted manifest.json for Safari.');
+}
+
 function generateSafariProject() {
+  adaptManifestForSafari();
   const result = spawnSync('xcrun', [
     'safari-web-extension-converter',
     distPath,

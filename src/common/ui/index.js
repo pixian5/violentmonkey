@@ -167,7 +167,7 @@ export const EXTERNAL_LINK_PROPS = {
   target: '_blank',
   rel: 'noopener noreferrer',
 };
-const getAsFileSystemHandle = globalThis.DataTransferItem?.prototype?.getAsFileSystemHandle;
+const { getAsFileSystemHandle } = DataTransferItem.prototype;
 
 if (getAsFileSystemHandle) {
   const { find } = [];

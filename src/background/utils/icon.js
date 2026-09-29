@@ -2,7 +2,6 @@ import { i18n, ignoreChromeErrors, makeDataUri, noop } from '@/common';
 import { registerInjector } from '@/common/browser-scripts-api';
 import { BLACKLIST } from '@/common/consts';
 import loadIconData from '@/common/load-icon-data';
-import wrapActionApi from './action-api';
 import { addOwnCommands, commands, init } from './init';
 import { installedOver } from './on-installed';
 import { getOption, hookOptions, setOption } from './options';
@@ -27,17 +26,8 @@ const iconCache = {};
 const iconDataCache = {};
 /** @return {string | Promise<string>} */
 export const getImageData = url => iconCache[url] || (iconCache[url] = loadIcon(url));
-// Firefox Android does not support such APIs
-const browserAction = (() => {
-  // Using `chrome` namespace in order to skip our browser.js polyfill in Chrome/Safari
-  const api = (globalThis.chrome || globalThis.browser)?.[__.MV3 ? 'action' : 'browserAction'];
-  return wrapActionApi(api, [
-    'setIcon',
-    'setBadgeText',
-    'setBadgeBackgroundColor',
-    'setTitle',
-  ]);
-})();
+// Firefox Android does not support such APIs, use noop
+const browserAction = browser[__.MV3 ? 'action' : 'browserAction'];
 const KEY_SHOW_BADGE = 'showBadge';
 const KEY_BADGE_COLOR = 'badgeColor';
 const KEY_BADGE_COLOR_BLOCKED = 'badgeColorBlocked';

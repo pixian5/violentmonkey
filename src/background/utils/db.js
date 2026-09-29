@@ -82,23 +82,6 @@ addOwnCommands({
   GetScriptCode(id) {
     return storage[S_CODE][Array.isArray(id) ? 'getMulti' : 'getOne'](id);
   },
-  /** @return {Promise<ReturnType<typeof parseScript>>} */
-  async ParseScriptFromStorage(data = {}) {
-    const { codeKey, ...src } = data || {};
-    if (!codeKey) throw 'Missing codeKey';
-    let code;
-    try {
-      code = await readStorageKeyWithRetry(codeKey);
-    } finally {
-      await storage.api.remove([codeKey]).catch(() => {});
-    }
-    if (code == null) throw 'Code not found';
-    return parseScript({ ...src, code });
-  },
-  /** @return {Promise<{ scripts: number, removed: number }>} */
-  async RebuildScriptIndex() {
-    return rebuildScriptIndex();
-  },
   GetTags: () => getScriptsTags(aliveScripts),
   /** @return {Promise<void>} */
   async MarkRemoved({ id, removed }) {
@@ -139,18 +122,33 @@ addOwnCommands({
   Vacuum: vacuum,
 });
 
-function resetScriptState() {
-  maxScriptId = 0;
-  maxScriptPosition = 0;
-  dbKeys.clear();
-  aliveScripts.length = 0;
-  removedScripts.length = 0;
-  setScriptSizes({});
-  for (const key in scriptMap) delete scriptMap[key];
-  for (const key in scriptSiteVisited) delete scriptSiteVisited[key];
-}
-
-function applyScriptData(data) {
+export async function initializeDatabase(reset) {
+  if (reset) {
+    maxScriptId = 0;
+    maxScriptPosition = 0;
+    dbKeys.clear();
+    aliveScripts.length = 0;
+    removedScripts.length = 0;
+    setScriptSizes({});
+    for (const key in scriptMap) delete scriptMap[key];
+    for (const key in scriptSiteVisited) delete scriptSiteVisited[key];
+  }
+  /** @type {string[]} */
+  let keys;
+  let [allKeys, data] = await Promise.all([
+    getStorageKeys?.(),
+    !getStorageKeys && storage.api.get(),
+    sessionData,
+  ]);
+  if (allKeys) {
+    // Filtering and creating Map in atomic native code operations instead of js loop
+    keys = allKeys.join('\n').replace(/^(?:(options|version|(?:scr|mod):\d+)|\S+)$/gm, '$1').trim();
+    dbKeys = new Map(JSON.parse(`[${keys.replace(/\S+/g, '["$&",1],').slice(0, -1)}]`));
+    keys = keys.split(/\n+/);
+    data = await storage.api.get(keys);
+  }
+  if (installedOver === NEW_INSTALL) await patchDB();
+  if (installedOver) storage.api.set({ [kVersion]: __.VM_VER });
   const uriMap = {};
   const defaultCustom = getDefaultCustom();
   data::forEachEntry(([key, script]) => {
@@ -191,7 +189,6 @@ function applyScriptData(data) {
       if (pathMap) for (const url in pathMap) if (isDataUri(url)) delete pathMap[url];
       maxScriptId = Math.max(maxScriptId, id);
       maxScriptPosition = Math.max(maxScriptPosition, getInt(script.props.position));
-      scriptMap[id] = script;
       (script.config.removed ? removedScripts : aliveScripts).push(script);
       // listing all known resource urls in order to remove unused mod keys
       if (!meta.require) meta.require = [];
@@ -200,29 +197,6 @@ function applyScriptData(data) {
       meta.grant = [...new Set(meta.grant || [])]; // deduplicate
     }
   });
-}
-
-export async function initializeDatabase(reset) {
-  if (reset) {
-    resetScriptState();
-  }
-  /** @type {string[]} */
-  let keys;
-  let [allKeys, data] = await Promise.all([
-    getStorageKeys?.(),
-    !getStorageKeys && storage.api.get(),
-    sessionData,
-  ]);
-  if (allKeys) {
-    // Filtering and creating Map in atomic native code operations instead of js loop
-    keys = allKeys.join('\n').replace(/^(?:(options|version|(?:scr|mod):\d+)|\S+)$/gm, '$1').trim();
-    dbKeys = new Map(JSON.parse(`[${keys.replace(/\S+/g, '["$&",1],').slice(0, -1)}]`));
-    keys = keys.split(/\n+/);
-    data = await storage.api.get(keys);
-  }
-  if (installedOver === NEW_INSTALL) await patchDB();
-  if (installedOver) storage.api.set({ [kVersion]: __.VM_VER });
-  applyScriptData(data);
   initOptions(data, installedOver, installedOver && installedOver !== NEW_INSTALL);
   if (__.DEBUG) {
     console.info('store:', {
@@ -246,47 +220,6 @@ export async function initializeDatabase(reset) {
 }
 
 initializeDatabase();
-
-function rebuildDbKeysFromAllKeys(allKeys) {
-  if (!allKeys?.length) {
-    dbKeys.clear();
-    return [];
-  }
-  // Filtering and creating Map in atomic native code operations instead of js loop
-  const filtered = allKeys.join('\n')
-    .replace(/^(?:(options|version|(?:scr|mod):\d+)|\S+)$/gm, '$1')
-    .trim();
-  dbKeys.clear();
-  if (!filtered) return [];
-  const keys = filtered.split(/\n+/);
-  keys.forEach(key => dbKeys.set(key, 1));
-  return keys;
-}
-
-async function rebuildScriptIndex() {
-  let allKeys, data;
-  resetScriptState();
-  if (getStorageKeys) {
-    allKeys = await getStorageKeys();
-    rebuildDbKeysFromAllKeys(allKeys);
-    data = await storage.api.get(allKeys);
-  } else {
-    data = await storage.api.get(null);
-    Object.keys(data).forEach(key => dbKeys.set(key, 1));
-  }
-  applyScriptData(data);
-  await vacuum(data);
-  await sortScripts();
-  return { scripts: aliveScripts.length, removed: removedScripts.length };
-}
-
-async function readStorageKeyWithRetry(codeKey, tries = 8, delay = 50) {
-  for (let i = 0; i < tries; i += 1) {
-    const data = await storage.api.get([codeKey]);
-    if (data && data[codeKey] != null) return data[codeKey];
-    if (i + 1 < tries) await makePause(delay);
-  }
-}
 
 /** @return {number} */
 function getInt(val) {
@@ -786,48 +719,6 @@ export async function parseScript(src) {
   return result;
 }
 
-const IMPORT_PORT_NAME = 'importScript';
-browser.runtime.onConnect.addListener(port => {
-  if (port.name !== IMPORT_PORT_NAME) return;
-  let data;
-  let chunks = [];
-  let done = false;
-  const finish = (msg) => {
-    if (done) return;
-    done = true;
-    try { port.postMessage(msg); } catch (e) { /* ignore */ }
-    try { port.disconnect(); } catch (e) { /* ignore */ }
-  };
-  port.onMessage.addListener(async msg => {
-    if (done) return;
-    try {
-      if (msg?.type === 'start') {
-        data = msg.data || {};
-        chunks = [];
-        try { port.postMessage({ type: 'ready' }); } catch (e) { /* ignore */ }
-        return;
-      }
-      if (!data) return;
-      if (msg?.type === 'chunk') {
-        chunks.push(msg.chunk || '');
-        return;
-      }
-      if (msg?.type === 'end') {
-        const code = chunks.join('');
-        const result = await parseScript({ ...data, code });
-        finish({ ok: true, result });
-      }
-    } catch (err) {
-      finish({ error: err?.message || `${err}` });
-    }
-  });
-  port.onDisconnect.addListener(() => {
-    done = true;
-    data = null;
-    chunks = [];
-  });
-});
-
 /** @return {Object} */
 function buildPathMap(script, base) {
   const { meta } = script;
@@ -929,9 +820,7 @@ async function fetchResource(src, type, url) {
 function postToPort(ports, id, msg) {
   let p = ports[id];
   if (!p) {
-    const connect = globalThis.browser?.runtime?.connect || globalThis.chrome?.runtime?.connect;
-    if (!connect) return;
-    p = ports[id] = connect({ name: id });
+    p = ports[id] = chrome.runtime.connect({ name: id });
     p.onDisconnect.addListener(() => {
       ignoreChromeErrors();
       delete ports[id];
@@ -997,7 +886,7 @@ export async function vacuum(data) {
       status[key] = 2 + scriptId;
     }
   };
-  if (!data) data = await storage.api.get(null);
+  if (!data) data = await storage.api.get();
   data::forEachKey((key) => {
     if (prefixRe.test(key)) {
       status[key] = -1;

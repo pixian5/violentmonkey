@@ -29,6 +29,7 @@ import { listenOnce } from '@/common/browser';
 import { kOrigTag, kTag, RUN_AT_RE } from '@/common/consts';
 import options from '@/common/options';
 import { showConfirmation } from '@/common/ui';
+import { FORK_TARGET, IS_SAFARI } from '@/fork/target';
 import {
   kComment, kDownloadURL, kExclude, kInclude, kMatch, kOrigExclude, kOrigInclude, kOrigMatch, runInBatch, store,
   vmZipEntryName,
@@ -40,7 +41,7 @@ const reports = reactive([]);
 const buttonImport = ref();
 const undoTime = ref('');
 const showDebug = true;
-const debugLabel = `导入调试: TARGET=${__.TARGET || 'unknown'} `
+const debugLabel = `导入调试: TARGET=${FORK_TARGET || 'unknown'} `
   + `VM_VER=${__.VM_VER || 'n/a'} `
   + `时间=${new Date().toLocaleTimeString()}`;
 const IMPORT_PORT_NAME = 'importScript';
@@ -48,7 +49,7 @@ const IMPORT_CHUNK_SIZE = 64 * 1024;
 const IMPORT_PORT_READY_TIMEOUT = 1500;
 const IMPORT_PORT_READY_RETRY = 3;
 const IMPORT_STORAGE_PREFIX = 'import:code:';
-const IMPORT_USE_STORAGE = __.TARGET === 'safari';
+const IMPORT_USE_STORAGE = IS_SAFARI;
 const VALUE_BATCH_BYTES = 256 * 1024;
 const VALUE_BATCH_COUNT = 10;
 const buttonImportScriptFile = '从文件导入脚本';
@@ -66,9 +67,9 @@ onMounted(() => {
   const toggleDragDrop = initDragDrop(buttonImport.value);
   addEventListener('hashchange', toggleDragDrop);
   toggleDragDrop();
-  reportDebug(`导入调试已启用 TARGET=${__.TARGET || 'unknown'} VM_VER=${__.VM_VER || 'n/a'}`);
+  reportDebug(`导入调试已启用 TARGET=${FORK_TARGET || 'unknown'} VM_VER=${__.VM_VER || 'n/a'}`);
   console.info('[vm-import] 导入调试已启用', {
-    target: __.TARGET,
+    target: FORK_TARGET,
     vmVer: __.VM_VER,
   });
 });

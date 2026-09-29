@@ -48,17 +48,6 @@ function buildManifest(base) {
       data.update_url = 'https://raw.githubusercontent.com/violentmonkey/violentmonkey/updates/updates-crx.xml';
     }
   }
-  if (process.env.TARGET === 'safari') {
-    delete data.browser_action?.browser_style;
-    if (data.options_ui) delete data.options_ui.open_in_tab;
-    data.permissions = data.permissions?.filter(key => ![
-      'notifications',
-      'webRequestBlocking',
-    ].includes(key));
-    data.optional_permissions = data.optional_permissions?.filter(key => key !== 'downloads');
-    if (!data.optional_permissions?.length) delete data.optional_permissions;
-    delete data.commands?._execute_browser_action;
-  }
   if (isBeta()) {
     // Do not support i18n in beta version
     const name = 'Violentmonkey BETA';

@@ -1,3 +1,4 @@
+import '@/fork';
 import {
   formatByteLength, getLocaleString, getScriptUpdateUrl, makePause, sendCmdDirectly, trueJoin,
 } from '@/common';
@@ -24,7 +25,6 @@ loadData();
  * @param {string} [code]
  */
 function initScript(script, sizes, code) {
-  sizes = Array.isArray(sizes) ? sizes : [];
   const $cache = script.$cache ??= {};
   const { custom, meta } = script;
   const localeName = getLocaleString(meta, kName);
@@ -51,7 +51,7 @@ function initScript(script, sizes, code) {
   $cache.sizes = formatSizesStr(str);
   $cache.sizeNum = total;
   $cache.sizesNum = sizes;
-  $cache[kStorageSize] = sizes[2] || 0;
+  $cache[kStorageSize] = sizes[2];
   $cache[kTag] = getUniqTags(script, custom, meta);
   if (code) $cache.code = code;
   script.$canUpdate = getScriptUpdateUrl(script)
@@ -72,7 +72,7 @@ async function requestData(id) {
   const allData = BGDATA.options;
   // Using await on the literal data to give Vue a breath to avoid a long white frame
   const data = await (allData || sendCmdDirectly('GetData', { id, sizes: true }, { retry: true }));
-  const { [SCRIPTS]: allScripts = [], sizes = [], ...auxData } = data || {};
+  const { [SCRIPTS]: allScripts, sizes, ...auxData } = data;
   Object.assign(store, auxData); // initScripts needs `cache` in store
   const scripts = [];
   const removedScripts = [];
@@ -119,7 +119,6 @@ Object.assign(handlers, {
   },
   async UpdateScript({ update, where, code } = {}) {
     if (!update) return;
-    if (!where?.id) return;
     if (updateThrottle
     || (updateThrottle = store.batch)
     && (updateThrottle = Promise.race([updateThrottle, makePause(500)]))) {
@@ -135,12 +134,7 @@ Object.assign(handlers, {
     if (!script) return; // We're in editor that doesn't have data for all scripts
     const removed = update.config?.removed;
     const oldTags = oldScript ? getUniqTags(oldScript) : '';
-    let sizes;
-    try {
-      [sizes] = await sendCmdDirectly('GetSizes', [where.id]);
-    } catch (e) {
-      sizes = [];
-    }
+    const [sizes] = await sendCmdDirectly('GetSizes', [where.id]);
     Object.assign(script, update);
     if (script.error && !update.error) script.error = null;
     initScript(script, sizes, code);
