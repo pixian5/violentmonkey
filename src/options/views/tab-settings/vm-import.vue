@@ -24,36 +24,37 @@
 
 <script setup>
 import { strFromU8, unzipSync } from 'fflate';
-import { ensureArray, getUniqId, i18n, makePause, readBlob, sendCmdDirectly } from '@/common';
-import { listenOnce } from '@/common/browser';
+import { ensureArray, getUniqId, i18n, readBlob, sendCmdDirectly } from '@/common';
+import browser, { listenOnce } from '@/common/browser';
 import { kOrigTag, kTag, RUN_AT_RE } from '@/common/consts';
 import options from '@/common/options';
 import { showConfirmation } from '@/common/ui';
-import { FORK_TARGET } from '@/fork/target';
-import { parseScriptForImport } from '@/fork/script-import';
-import { importTextScriptFile, withTimeout } from '@/fork/txt-transfer';
 import {
   kComment, kDownloadURL, kExclude, kInclude, kMatch, kOrigExclude, kOrigInclude, kOrigMatch, runInBatch, store,
   vmZipEntryName,
 } from '../../utils';
+// fork: 导入流程的自有增强都在 @/fork/import-flow，这里只做组装与调用
+import {
+  createImportDeps, createImportReporter, isImportDebugEnabled, isPlainObject,
+  getImportDebugLabel, pickFileForImport, rebuildIndexOrCheckPosition,
+  refreshAfterImport, sendValueStoresBatched, waitPortReady,
+} from '@/fork/import-flow';
+import { importTextScriptFile, withTimeout } from '@/fork/txt-transfer';
 import { onActivated, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import SettingCheck from '@/common/ui/setting-check';
 
 const reports = reactive([]);
 const buttonImport = ref();
 const undoTime = ref('');
-const showDebug = true;
-const debugLabel = `导入调试: TARGET=${FORK_TARGET || 'unknown'} `
-  + `VM_VER=${__.VM_VER || 'n/a'} `
-  + `时间=${new Date().toLocaleTimeString()}`;
-const VALUE_BATCH_BYTES = 256 * 1024;
-const VALUE_BATCH_COUNT = 10;
-const buttonImportScriptFile = '从文件导入脚本';
 const i18nConfirmUndoImport = i18n('confirmUndoImport');
 const labelImportScriptData = i18n('labelImportScriptData');
 const labelImportSettings = i18n('labelImportSettings');
-const isPlainObject = val => val && typeof val === 'object' && !Array.isArray(val);
+const buttonImportScriptFile = '从文件导入脚本';
+const showDebug = isImportDebugEnabled();
+const debugLabel = getImportDebugLabel();
 const TM = 'Tampermonkey';
+const { report, reportDebug } = createImportReporter(reports);
+const importDeps = createImportDeps({ reports, store });
 
 let depsPortId;
 let removeDepsPortListener;
@@ -63,11 +64,6 @@ onMounted(() => {
   const toggleDragDrop = initDragDrop(buttonImport.value);
   addEventListener('hashchange', toggleDragDrop);
   toggleDragDrop();
-  reportDebug(`导入调试已启用 TARGET=${FORK_TARGET || 'unknown'} VM_VER=${__.VM_VER || 'n/a'}`);
-  console.info('[vm-import] 导入调试已启用', {
-    target: FORK_TARGET,
-    vmVer: __.VM_VER,
-  });
 });
 onBeforeUnmount(() => removeDepsPortListener?.());
 onActivated(() => {
@@ -83,52 +79,21 @@ onActivated(() => {
 function pickBackup() {
   reports.length = 0;
   reportDebug('点击导入按钮');
-  pickFile('.zip', importBackup);
+  pickFileForImport('.zip', importBackup, reportDebug);
 }
 
 function pickTextScript() {
   reports.length = 0;
   reportDebug('点击从文件导入脚本按钮');
-  pickFile('.txt,.user.js,.js,text/plain,application/javascript', importTextScript);
+  pickFileForImport('.txt,.user.js,.js,text/plain,application/javascript', importTextScript, reportDebug);
 }
 
-function pickFile(accept, onPick) {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = accept;
-  input.style.position = 'fixed';
-  input.style.left = '-1000px';
-  input.style.top = '0';
-  input.style.opacity = '0';
-  input.style.width = '1px';
-  input.style.height = '1px';
-  let picked = false;
-  let waitingTimer;
-  const onFocus = () => {
-    if (!picked) reportDebug('可能未选择文件');
-    cleanup();
-  };
-  const cleanup = () => {
-    clearTimeout(waitingTimer);
-    removeEventListener('focus', onFocus, true);
-  };
-  input.onchange = () => {
-    picked = true;
-    const file = input.files?.[0];
-    reportDebug(file ? `选择文件: ${file.name} (${file.size} bytes)` : '未选择文件');
-    cleanup();
-    onPick(file);
-    input.remove();
-  };
-  input.addEventListener?.('cancel', () => {
-    reportDebug('文件选择已取消');
-    cleanup();
-  });
-  document.body.append(input);
-  reportDebug('触发文件选择');
-  input.click();
-  waitingTimer = setTimeout(() => reportDebug('等待选择文件...'), 400);
-  addEventListener('focus', onFocus, true);
+async function importTextScript(file) {
+  if (store.batch) {
+    reportDebug('导入被批处理锁定');
+    return;
+  }
+  runInBatch(importTextScriptFile, file, importDeps);
 }
 
 async function importBackup(file) {
@@ -137,18 +102,8 @@ async function importBackup(file) {
   }
 }
 
-async function importTextScript(file) {
-  if (store.batch) {
-    reportDebug('导入被批处理锁定');
-    return;
-  }
-  reports.length = 0;
-  runInBatch(importTextScriptFile, file, txtTransferDeps);
-}
-
 async function doImportBackup(buf, zipName) {
   reports.length = 0;
-  reportDebug('开始导入');
   let vm;
   let files;
   let total = 0;
@@ -203,7 +158,7 @@ async function doImportBackup(buf, zipName) {
     removeDepsPortListener = null;
   };
   if (!undoPort) {
-    now = ' ⯈ ' + new Date().toLocaleTimeString();
+    now = ' ▶ ' + new Date().toLocaleTimeString();
     undoPort = browser.runtime.connect({ name: 'undoImport' });
     const ready = await waitPortReady(undoPort);
     if (!ready) undoPort = null;
@@ -231,36 +186,18 @@ async function doImportBackup(buf, zipName) {
       );
     }
   }
-  reportDebug('处理 .options.json');
   optionsNames.forEach(readScriptOptions);
-  reportDebug('处理 .user.js');
   for (const filename in scriptTimes) {
     await readScript(filename, scriptTimes[filename]);
   }
   if (importScriptData) {
-    reportDebug('处理 .storage.json');
     storageNames.forEach(readScriptStorage);
-    await sendValueStoresBatched(values);
+    await sendValueStoresBatched(values, reportDebug);
   }
-  try {
-    await withTimeout(
-      sendCmdDirectly('RebuildScriptIndex', null, { retry: true, bgTimeout: 1200 }),
-      20000,
-      'RebuildScriptIndex 超时'
-    );
-    reportDebug('已重建后台脚本索引');
-  } catch (e) {
-    reportDebug(`重建索引失败，回退检查位置: ${e?.message || e}`);
-    await withTimeout(
-      sendCmdDirectly('CheckPosition', null, { retry: true, bgTimeout: 1200 }),
-      15000,
-      'CheckPosition 超时'
-    );
-  }
-  await refreshAfterImport();
+  await rebuildIndexOrCheckPosition(reportDebug);
+  await refreshAfterImport({ store, onDebug: reportDebug });
   reportProgress();
   if (now && undoPort) undoTime.value = now;
-  reportDebug('导入完成');
 
   async function readScript(filename, time) {
     let decodedTime;
@@ -293,18 +230,13 @@ async function doImportBackup(buf, zipName) {
     files[filename] = '';
     try {
       reportDebug(`ParseScript: ${filename}`);
-      const result = await withTimeout(
-        parseScriptForImport(data, code, filename),
-        120000,
-        `ParseScript 超时: ${filename}`
-      );
+      const result = await importDeps.parseScriptForImport(data, code, filename);
       uriMap[name] = result.update.props.uri;
       reportProgress(filename);
     } catch (e) {
       report(e, filename, 'script');
     }
   }
-
   function readScriptOptions(filename) {
     const name = filename.slice(0, -kOptionsJson.length);
     const { meta, settings = {}, options: opts } = files[filename];
@@ -369,61 +301,6 @@ async function doImportBackup(buf, zipName) {
   }
 }
 
-async function sendValueStoresBatched(data) {
-  const entries = Object.entries(data);
-  const total = entries.length;
-  if (!total) return;
-  reportDebug(`写入脚本数据: ${total}`);
-  let batch = {};
-  let batchBytes = 0;
-  let sent = 0;
-  const flush = async () => {
-    const payload = batch;
-    batch = {};
-    batchBytes = 0;
-    await withTimeout(
-      sendCmdDirectly('SetValueStores', payload, { retry: true, bgTimeout: 1200 }),
-      20000,
-      `SetValueStores 超时 (${sent}/${total})`
-    );
-    await makePause(0);
-  };
-  for (const [key, valueStore] of entries) {
-    let size = 0;
-    try { size = JSON.stringify(valueStore).length; } catch (e) { /* ignore */ }
-    const approx = String(key).length + size + 8;
-    if (batchBytes && (
-      batchBytes + approx > VALUE_BATCH_BYTES
-      || Object.keys(batch).length >= VALUE_BATCH_COUNT
-    )) {
-      await flush();
-      reportDebug(`写入脚本数据进度: ${sent}/${total}`);
-    }
-    batch[key] = valueStore;
-    batchBytes += approx;
-    sent += 1;
-  }
-  if (Object.keys(batch).length) {
-    await flush();
-  }
-  reportDebug(`写入脚本数据完成: ${sent}/${total}`);
-}
-
-async function refreshAfterImport() {
-  try {
-    await options.ready;
-    const data = await sendCmdDirectly('GetData', { sizes: true }, { retry: true });
-    const count = data?.scripts?.length || 0;
-    reportDebug(`导入后后台脚本数: ${count}`);
-    if (count && !store.scripts.length) {
-      reportDebug('导入后刷新页面');
-      setTimeout(() => location.reload(), 200);
-    }
-  } catch (e) {
-    reportDebug(`导入后刷新失败: ${e?.message || e}`);
-  }
-}
-
 async function undoImport() {
   if (!undoPort) return;
   if (!await showConfirmation(i18nConfirmUndoImport)) return;
@@ -435,49 +312,6 @@ async function undoImport() {
 function resolveOnUndoMessage(resolve) {
   undoPort.onMessage::listenOnce(resolve);
 }
-
-function waitPortReady(port, timeout = 1500) {
-  return new Promise(resolve => {
-    let done;
-    const finish = ok => {
-      if (done) return;
-      done = true;
-      resolve(ok);
-    };
-    const timer = setTimeout(finish, timeout, false);
-    port.onMessage::listenOnce(() => {
-      clearTimeout(timer);
-      finish(true);
-    });
-    port.onDisconnect?.addListener(() => {
-      clearTimeout(timer);
-      finish(false);
-    });
-  });
-}
-
-function report(text, name, type = 'critical') {
-  const message = text && (text.message || text.code) ? (text.message || text.code) : `${text}`;
-  reports.push({ text: message, name, type });
-}
-
-function reportDebug(text) {
-  report(text, '', 'debug');
-}
-
-// TXT 导入逻辑在 src/fork/txt-transfer.js，这里只提供 UI 与流程依赖
-const parseScript = (data, code, filename) => parseScriptForImport(data, code, filename, {
-  reportDebug,
-  withTimeout,
-});
-const txtTransferDeps = {
-  report,
-  reportDebug,
-  parseScriptForImport: parseScript,
-  refreshAfterImport,
-  sendValueStoresBatched,
-  options,
-};
 
 function initDragDrop(targetElement) {
   let leaveTimer;

@@ -14,6 +14,7 @@ import {
 } from './requests-core';
 import { badges } from './session-data';
 import { getFrameDocIdAsObj, getFrameDocIdFromSrc } from './tabs';
+import { makeRequestErrorCb } from '@/fork/request-error';
 import { FIREFOX, navUA, navUAD, ua } from './ua';
 import { vetUrl } from './url';
 
@@ -60,26 +61,8 @@ addPublicCommands({
       }
       sendTabCmd(tabId, 'HttpRequested', res, req.frame);
     };
-    const cbError = err => {
-      cb({
-        id,
-        [ERROR]: [err.message || `${err}`, err.name],
-        data: null,
-        type: ERROR,
-      });
-      cb({
-        id,
-        data: {
-          finalUrl: req.url,
-          [kResponse]: null,
-          [kResponseHeaders]: null,
-          readyState: 4,
-          status: 0,
-          statusText: '',
-        },
-        type: 'loadend',
-      });
-    };
+    // fork: 出错时补发 loadend，实现见 @/fork/request-error
+    const cbError = makeRequestErrorCb(cb, id, req);
     Object.defineProperties(req, { // non-enumerable props won't be messaged
       cb: {value: cb},
       cbe: {value: cbError},

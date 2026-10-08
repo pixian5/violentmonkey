@@ -201,6 +201,8 @@ events.on('change', (state) => {
 
 // --- openAuthPage (Promise-based with timeout) ---
 
+// fork(patch): 授权流程改成带 tabId 的 attempt 状态机，修并发授权时的竞态与失败卡死。
+// 这段无法外挂（要访问模块内部 service 状态），合并上游时以本文件为准，见 docs 挂点清单。
 let authAttempt;
 
 function finishAuthAttempt(attempt, result, closeTab) {
@@ -246,7 +248,7 @@ export function openAuthPage(url, redirectUri) {
       },
       ['blocking'],
     );
-  } catch {
+  } catch { // fork(patch): Safari 下 addListener 带 blocking 会抛错，失败要收尾而不是悬挂
     finishAuthAttempt(attempt, null);
     return promise;
   }

@@ -2,8 +2,8 @@ import { isEmpty } from '@/common';
 import { kDownloads } from '@/common/consts';
 import { FORBIDDEN_HEADER_RE, requests } from './requests-core';
 import { downloads, flushSession } from './session-data';
+import { reportDownloadError, vetDownloadUrl } from '@/fork/download-fixes';
 import { FIREFOX } from './ua';
-import { vetUrl } from './url';
 
 const reReferer = /^referer$/i; // allowed since Firefox 70
 const reUA = /^user-agent$/i; // allowed since Firefox 43
@@ -29,7 +29,7 @@ export default async function downloadViaApi(opts, events, id, req, src, fileNam
     headers: headers ? Object.entries(headers).map(objEntryToApiHeader).filter(Boolean) : undefined,
     method: opts.method || 'GET',
     saveAs: opts.saveAs,
-    url: vetUrl(opts.url, src.url, true),
+    url: vetDownloadUrl(opts.url, src.url),
     ...IS_FIREFOX && {
       incognito: src.tab?.incognito,
     },
@@ -50,12 +50,8 @@ async function onDownloadChanged({ id, error, state } = {}) {
     return;
   }
   if (error) {
-    req.cb({
-      id: reqId,
-      [ERROR]: [error.current, 'DownloadError'],
-      data: null,
-      type: ERROR,
-    });
+    // fork: 显式回一条 error 消息，实现见 @/fork/download-fixes
+    reportDownloadError(req, reqId, error.current);
   }
   if (!state) {
     // nothing

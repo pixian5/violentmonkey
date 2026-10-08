@@ -12,8 +12,8 @@ import { clearNotifications } from './notifications';
 import { getOption, hookOptionsInit } from './options';
 import { addMenuConfig } from './page-menu-commands';
 import { onPermissionChanged, permissionDownloads } from './permissions';
-import { IS_SAFARI } from '@/fork/target';
-import { normalizeRealm, prepare, prepareXhrBlob } from './preinject-prepare';
+import { normalizeInjectInto, shouldDisableXhrInject } from '@/fork/safari-preinject';
+import { prepare, prepareXhrBlob } from './preinject-prepare';
 import { clearRequestsByTabId } from './requests';
 import { kSetCookie } from './requests-core';
 import { flushSession, skippedTabs } from './session-data';
@@ -88,7 +88,7 @@ export const isTopFrame = info => info.frameType === 'outermost_frame' || !info[
 const OPT_HANDLERS = {
   [BLACKLIST]: cache.destroy,
   defaultInjectInto(value) {
-    value = IS_SAFARI ? CONTENT : normalizeRealm(value);
+    value = normalizeInjectInto(value);
     cache.destroy();
     if (injectInto) { // already initialized, so we should update the listener
       if (value === CONTENT) {
@@ -140,7 +140,7 @@ function onOptionChanged(changes) {
 }
 
 function toggleXhrInject(enable) {
-  if (IS_SAFARI) { // Safari 无法通过 cookie 传递 blob 注入数据
+  if (shouldDisableXhrInject()) {
     xhrInject = false;
     return;
   }
