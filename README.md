@@ -27,6 +27,10 @@ application.
 - 已合并上游 `v2.49.4`（4 个新提交，含 `background/sw.js` 改动）**零冲突**，
   五个入口挂点全部保留；合并后 Lint、84 项测试、MV2/MV3 构建复验通过。
 - Safari 链路已验证：清单适配、宿主构建与签名、`pluginkit` 注册均通过。
+- 修复「Safari 里看不到扩展」：`package-safari.mjs` 原先**只构建不安装**，`/Applications` 长期留着
+  8-04 的 adhoc 旧包（Safari 不接受无团队签名）；现已补 `installHostApp()`（安装+签名校验+清理构建
+  副本+重注册），`run-safari.mjs` 改为从 `/Applications` 启动。
+  [查看排查过程](docs/20261009-0055-Safari扩展消失根因与安装步骤补齐.md)
 - [查看挂点清单](docs/20261009003600-外挂式补丁层挂点清单.md)
 - [查看上一轮进度](docs/20260930014200-上游补丁隔离改造.md)
 

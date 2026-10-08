@@ -1,18 +1,12 @@
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const projectRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const appPath = path.join(
-  projectRoot,
-  'build',
-  'safari',
-  'DerivedData',
-  'Build',
-  'Products',
-  'Debug',
-  'ViolentmonkeySafari.app'
-);
+// 必须从 /Applications 启动：从构建目录启动会让 Safari 加载 DerivedData 里那份副本，
+// 既和已安装版本不同步，也会多出一条扩展条目。
+const appPath = '/Applications/ViolentmonkeySafari.app';
 const extensionBundleId = 'io.violentmonkey.safari.Extension';
 
 function run(command, args, options = {}) {
@@ -52,6 +46,9 @@ function waitForExtension(timeout = 15000) {
 }
 
 function main() {
+  if (!fsSync.existsSync(appPath)) {
+    throw new Error(`${appPath} not found. Run safari:package first (it installs the host app).`);
+  }
   stopOldApp();
   openApp();
   const registered = waitForExtension();
