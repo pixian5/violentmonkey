@@ -30,7 +30,7 @@ application.
 - 修复「Safari 里看不到扩展」：`package-safari.mjs` 原先**只构建不安装**，`/Applications` 长期留着
   8-04 的 adhoc 旧包（Safari 不接受无团队签名）；现已补 `installHostApp()`（安装+签名校验+清理构建
   副本+重注册），`run-safari.mjs` 改为从 `/Applications` 启动。
-  [查看排查过程](docs/20261009-0055-Safari扩展消失根因与安装步骤补齐.md)
+  [查看排查过程](docs/20261009005500-Safari扩展消失根因与安装步骤补齐.md)
 - [查看挂点清单](docs/20261009003600-外挂式补丁层挂点清单.md)
 - [查看上一轮进度](docs/20260930014200-上游补丁隔离改造.md)
 

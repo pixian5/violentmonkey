@@ -1,6 +1,12 @@
 # 扩展构建与上游同步说明
 
-本文是本 fork 的操作约定。当前交付目标只有浏览器扩展，不包含 Electron 桌面主体、Safari 宿主程序或 `/Applications` 安装操作。
+本文是本 fork 的操作约定。扩展日常交付只需构建 `dist/`；Electron 桌面主体不在交付范围内。
+
+> **2026-10-09 更新**：Safari 宿主程序**已回到交付流程**。此前 `safari:package` 只构建不安装，
+> 导致 `/Applications` 长期留着 8-04 的 adhoc 旧包，Safari 里根本看不到扩展。
+> 现已补上 `installHostApp()`（安装 + 签名校验 + 清理构建副本 + 重注册），
+> 详见 [Safari 扩展消失根因与安装步骤补齐](20261009005500-Safari扩展消失根因与安装步骤补齐.md)。
+> 本文第「Electron 与 Safari 文件」一节中关于 Safari 的部分按此条理解，不再适用。
 
 ## 一、交付范围
 
