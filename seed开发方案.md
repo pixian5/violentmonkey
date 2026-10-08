@@ -493,7 +493,7 @@ git push origin master
 
 ### 7.2 上游同步流程
 
-详细流程参考 [docs/extension-build-and-upstream-sync.md](file:///Users/x/code/violentmonkey/docs/extension-build-and-upstream-sync.md)，关键点：
+详细流程参考 [docs/20260806-1117-扩展构建与上游同步说明-GPT-6.md](file:///Users/x/code/violentmonkey/docs/20260806-1117-扩展构建与上游同步说明-GPT-6.md)，关键点：
 
 ```bash
 # 1. 备份当前分支

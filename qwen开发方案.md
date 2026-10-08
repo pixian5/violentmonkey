@@ -1084,8 +1084,8 @@ pnpm version minor    # 递增 minor
 
 - [DEVELOPMENT.md](./DEVELOPMENT.md): 开发指南
 - [RELEASE.md](./RELEASE.md): 发布流程
-- [docs/extension-build-and-upstream-sync.md](./docs/extension-build-and-upstream-sync.md): 扩展构建与上游同步
-- [docs/2026-08-07-code-review-fixes.md](./docs/2026-08-07-code-review-fixes.md): 代码审查修复记录
+- [docs/20260806-1117-扩展构建与上游同步说明-GPT-6.md](./docs/20260806-1117-扩展构建与上游同步说明-GPT-6.md): 扩展构建与上游同步
+- [docs/20260807-2357-全项目代码审查修复-GPT-6.md](./docs/20260807-2357-全项目代码审查修复-GPT-6.md): 代码审查修复记录
 
 ---
 
