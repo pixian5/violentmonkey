@@ -21,3 +21,16 @@ yarn-error.log*
 
 # WorkBuddy 工作目录（项目记忆等，不入库）
 .workbuddy/
+Thumbs.db
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
