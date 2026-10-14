@@ -31,8 +31,9 @@ application.
   8-04 的 adhoc 旧包（Safari 不接受无团队签名）；现已补 `installHostApp()`（安装+签名校验+清理构建
   副本+重注册），`run-safari.mjs` 改为从 `/Applications` 启动。
   [查看排查过程](docs/20261009-0055-Safari扩展消失根因与安装步骤补齐-GPT-6.md)
-- 新增用户脚本 `脚本/github链接新标签打开.js`（v1.0.0）：在 github.com / *.github.com 所有页面
-  左键单击链接强制新标签打开，捕获阶段事件委托兼容 SPA，排除锚点/中键/修饰键/已有 target=_blank。
+- 新增用户脚本 `脚本/github链接新标签打开.js`（v1.0.1）：在 github.com / *.github.com 所有页面
+  左键单击链接强制新标签打开，捕获阶段事件委托兼容 SPA，排除锚点/中键/修饰键/已有 target=_blank；
+  Releases 附件、codeload 源码归档、带 download 属性的链接保持当前页下载。
   [查看操作记录](docs/20261014-1651-GitHub新标签脚本新增-Doubao.md)
 - [查看挂点清单](docs/20261009-0036-外挂式补丁层挂点清单-GPT-6.md)
 - [查看上一轮进度](docs/20260930-0142-上游补丁隔离改造-GPT-6.md)

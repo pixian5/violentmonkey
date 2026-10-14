@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GitHub 链接在新标签页打开
 // @namespace    https://github.com/pixian5
-// @version      1.0.0
-// @description  在 github.com 及 *.github.com 任意页面点击链接时，强制在新标签页打开；锚点、中键/Cmd(Ctrl)+点击、已有 target=_blank 的链接保持原行为；兼容 GitHub SPA 动态加载
+// @version      1.0.1
+// @description  在 github.com 及 *.github.com 任意页面点击链接时，强制在新标签页打开；锚点、中键/Cmd(Ctrl)+点击、已有 target=_blank、Releases 下载/codeload/带 download 属性的链接保持原行为；兼容 GitHub SPA 动态加载
 // @author       pixian5
 // @match        *://github.com/*
 // @match        *://*.github.com/*
@@ -15,14 +15,14 @@
     'use strict';
 
     // ===== 配置 =====
-    // 调试日志开关：true 时在控制台打印每次拦截的链接，便于排查误触
+    // 调试日志开关：true 时在控制台打印每次拦截/放行的链接，便于排查误触
     const DEBUG = true;
     // 允许新标签打开时携带的 cookie/session：noopener 不带原页面引用，noreferrer 不发 Referer
     const WINDOW_OPEN_FEATURES = 'noopener,noreferrer';
 
     /**
      * 判断本次点击是否需要被脚本接管
-     * 只处理真正的 <a href>，排除锚点、伪协议、按钮型 a 标签
+     * 只处理真正的 <a href>，排除锚点、伪协议、按钮型 a 标签、下载类链接
      */
     function shouldIntercept(anchor) {
         if (!anchor) return false;
@@ -40,6 +40,23 @@
 
         // 用户已经显式指定 target（_blank / _parent / _top 等），尊重原设置
         if (anchor.target && anchor.target !== '_self' && anchor.target !== '') return false;
+
+        // HTML5 原生 download 属性：浏览器会直接下载文件，不接管
+        if (anchor.hasAttribute('download')) return false;
+
+        // 用 .href 解析成绝对地址后再判断 host / path
+        let url;
+        try {
+            url = new URL(anchor.href, location.href);
+        } catch (e) {
+            return false;
+        }
+
+        // codeload.github.com：GitHub 仓库源码归档（zip/tar.gz）的实际下载域名
+        if (url.hostname === 'codeload.github.com') return false;
+
+        // /releases/download/：Releases 页面的二进制附件，走当前页直接下载
+        if (url.hostname === 'github.com' && url.pathname.includes('/releases/download/')) return false;
 
         return true;
     }
@@ -86,6 +103,6 @@
     }, /* useCapture = */ true);
 
     if (DEBUG) {
-        console.log('[GitHub新标签] 脚本已加载，监听范围: github.com / *.github.com');
+        console.log('[GitHub新标签] 脚本已加载 v1.0.1，监听范围: github.com / *.github.com');
     }
 })();
