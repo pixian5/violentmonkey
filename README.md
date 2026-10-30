@@ -35,6 +35,9 @@ application.
   左键单击链接强制新标签打开，捕获阶段事件委托兼容 SPA，排除锚点/中键/修饰键/已有 target=_blank；
   Releases 附件、codeload 源码归档、带 download 属性的链接保持当前页下载。
   [查看操作记录](docs/20261014-1651-GitHub新标签脚本新增-Doubao.md)
+- 清理 `/Applications` 里 8-06 手动安装遗留的 3 个 `Violentmonkey.app.backup-*`（约 800MB），
+  桌面壳重打包到 2.49.0（`pnpm macos:dist`）并重新安装，签名校验、窗口启动均通过。
+  [查看操作记录](docs/20261030-1836-桌面壳清理与重打包至2.49.0-DeepSeek-V4.1-Flash.md)
 - [查看挂点清单](docs/20261009-0036-外挂式补丁层挂点清单-GPT-6.md)
 - [查看上一轮进度](docs/20260930-0142-上游补丁隔离改造-GPT-6.md)
 
