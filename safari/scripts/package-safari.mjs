@@ -14,19 +14,6 @@ const distPath = path.join(projectRoot, 'dist');
 const appBundleId = 'io.violentmonkey.safari';
 const extensionBundleId = `${appBundleId}.Extension`;
 
-function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: projectRoot,
-    stdio: 'pipe',
-    encoding: 'utf8',
-    ...options,
-  });
-  if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(' ')}\n${result.stderr || result.stdout || ''}`.trim());
-  }
-  return result;
-}
-
 function detectSigningIdentity() {
   const result = spawnSync('security', ['find-identity', '-v', '-p', 'codesigning'], {
     encoding: 'utf8',
