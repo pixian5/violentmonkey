@@ -81,15 +81,34 @@ function generateSafariProject() {
   }
 }
 
+/*
+ * Xcode 26+ 的 safari-web-extension-converter 输出新格式 `project.xcproj`（JSON），
+ * 旧版输出 `project.pbxproj`（OpenStep 格式）。两者都要支持。
+ */
+function findProjectFile() {
+  const candidates = [pbxprojPath, path.join(xcodeprojPath, 'project.xcproj')];
+  return candidates.find(file => fs.existsSync(file));
+}
+
 function patchBundleIdentifiers() {
-  const source = fs.readFileSync(pbxprojPath, 'utf8');
-  const patched = source
-  .replaceAll(/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/g, match => (
-    match.includes('.Extension;')
-      ? `PRODUCT_BUNDLE_IDENTIFIER = ${extensionBundleId};`
-      : `PRODUCT_BUNDLE_IDENTIFIER = ${appBundleId};`
-  ));
-  fs.writeFileSync(pbxprojPath, patched, 'utf8');
+  const projectFile = findProjectFile();
+  if (!projectFile) {
+    throw new Error(`Project file not found in ${xcodeprojPath}`);
+  }
+  const source = fs.readFileSync(projectFile, 'utf8');
+  const isJson = projectFile.endsWith('.xcproj');
+  const patched = isJson
+    ? source.replaceAll(/"PRODUCT_BUNDLE_IDENTIFIER":\s*"[^"]*"/g, match => (
+      match.includes('.Extension')
+        ? `"PRODUCT_BUNDLE_IDENTIFIER": "${extensionBundleId}"`
+        : `"PRODUCT_BUNDLE_IDENTIFIER": "${appBundleId}"`
+    ))
+    : source.replaceAll(/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/g, match => (
+      match.includes('.Extension;')
+        ? `PRODUCT_BUNDLE_IDENTIFIER = ${extensionBundleId};`
+        : `PRODUCT_BUNDLE_IDENTIFIER = ${appBundleId};`
+    ));
+  fs.writeFileSync(projectFile, patched, 'utf8');
 }
 
 function buildSafariHostApp(identity, teamId) {
