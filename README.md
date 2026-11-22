@@ -17,13 +17,17 @@ application.
 
 ## 当前开发进度
 
-- 已合并上游 2026-09-29 同步逻辑更新；Lint + 84 项自动测试、MV2/MV3 构建通过。
-- 修复 `chrome.action` 包装吞掉 Promise 导致的启动异常（改为运行期补丁，不再改上游文件）。
-- 完成上游补丁隔离改造：自有改动集中在 `src/fork/`，上游源码改动文件从 24 个降到 11 个，其中 5 个是单行挂点。
-- 完成第二轮外挂化：导入流程（200 多行）、请求错误回调、下载修正、Safari 注入判断全部搬进 `src/fork/`，
-  上游业务文件的自有代码量从约 350 行降到约 160 行；`vm-import.vue` 的 diff 从 +243 降到 +79，
-  `requests.js` 从 +20 降到 +3。
-- 全部挂点（含唯一无法外挂的 `sync-engine.js`）登记在挂点清单，合并上游时按清单核对即可。
+- **修复「Safari 点弹窗菜单全部无响应」**（工程 0.1.2）：根因是 Safari 的
+  `permissions.contains({permissions:['downloads']})` **同步抛错**，而上游 `permissions.js`
+  在模块顶层调用它，未捕获异常炸掉整个后台 bundle，`runtime.onMessage` 从未注册。
+  修复后弹窗不再显示红色堆栈，齿轮可开管理面板、+ 可进编辑器、设置页可交互、启用开关生效。
+  [查看排查过程](docs/20261122-2345-Safari弹窗菜单无响应根因定位与修复-Claude-Sonnet-4.5.md)
+- 新增 `src/fork/guard.js`：`safePatch` / `trySet` / 早期异常捕获（崩溃栈写入 `localStorage['fork:log']`），
+  让单个补丁失败不再牵连整个后台；`src/fork/diagnostics.js` 增加 init 看门狗与命令级错误日志。
+- `src/fork/log.js`（新增）：后台日志落入 localStorage，弹窗同源可读，Safari 无 devtools 时的取证通道。
+- 修正三处回调丢失（`storage.local.get`、`tabs.query`、async stub）与 `windows.getAll()` 返回值规整；
+  新增 `tabs.create` 降级重试（逐级剔除 Safari 不支持的 `openerTabId` / `cookieStoreId` / `index`）。
+- Node 严格 mock 双向对照：旧产物 **0/7**（全超时）→ 新产物 **6/7**；Safari 实机全部菜单入口验证通过。
 - 已合并上游 `v2.49.4`（4 个新提交，含 `background/sw.js` 改动）**零冲突**，
   五个入口挂点全部保留；合并后 Lint、84 项测试、MV2/MV3 构建复验通过。
 - Safari 链路已验证：清单适配、宿主构建与签名、`pluginkit` 注册均通过。
@@ -38,18 +42,24 @@ application.
 - 清理 `/Applications` 里 8-06 手动安装遗留的 3 个 `Violentmonkey.app.backup-*`（约 800MB），
   桌面壳重打包到 2.49.0（`pnpm macos:dist`）并重新安装，签名校验、窗口启动均通过。
   [查看操作记录](docs/20261030-1836-桌面壳清理与重打包至2.49.0-DeepSeek-V4.1-Flash.md)
+- [查看本轮进度详情](docs/20261122-2350-当前开发进度-Claude-Sonnet-4.5.md)
 - [查看挂点清单](docs/20261009-0036-外挂式补丁层挂点清单-GPT-6.md)
-- [查看上一轮进度](docs/20260930-0142-上游补丁隔离改造-GPT-6.md)
+- [查看文档索引](文档索引.md)
 
 ## 下一步待实现
 
+- **验证 Safari 脚本注入链路**：`tabs.executeScript` / `insertCSS` / `removeCSS` 在 Safari 上是只读成员，
+  现有 `patchExecuteScript` 实际写不进去（日志有「属性写入无效」）。需在真实网页安装一个用户脚本确认注入是否成功；
+  若失败，改为在调用点（`browser-scripts-api.js` MV2 分支）适配。
+- 把 `tabs.create` 统一为 Promise 式单次降级：当前回调式分支在失败时可能重复尝试。
+- 验证 Safari 回收后台进程后，`init` 能否重新完成、弹窗能否自动恢复。
 - 给上游提 PR：授权流程竞态修复（`sync-engine.js`）与 `zipTimeToDate` 运算符优先级错误，
   上游合入后本地这两处挂点即可删除。
 - Safari 打包（`safari/scripts/package-safari.mjs`）走 Xcode 自动签名会内嵌 7 天描述文件；
   可以在打包后去掉描述文件重签，`.app`/`.appex` 不需要它。
-- 在隔离测试账户验证新同步逻辑，并在 Safari 内验证真实网页注入。
 - 归档或删除已过时的 `qwen开发方案.md`、`seed开发方案.md`（基于上游 2.46.4 / 自有 0.0.4，
-  与现在的 2.49.0 / 0.0.9 路线不符）。
+  与现在的 2.49.0 / 0.1.x 路线不符）。
+- [查看本轮待办详情](docs/20261122-2350-下一步待实现-Claude-Sonnet-4.5.md)
 - [查看挂点清单](docs/20261009-0036-外挂式补丁层挂点清单-GPT-6.md)
 - [查看上游合并与外挂式方案分析](docs/20260929-2353-上游同步与外挂式方案分析-GPT-6.md)
 

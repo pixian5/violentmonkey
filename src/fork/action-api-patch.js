@@ -1,4 +1,5 @@
 import wrapActionApi from './action-api';
+import { safePatch, trySet } from './guard';
 
 /*
  * 工具栏 API 兼容层。
@@ -12,6 +13,8 @@ import wrapActionApi from './action-api';
  *    在 Safari 的 MV2 构建里得到 undefined，导致 `Run`、`SetBadge` 等
  *    后台命令直接抛 TypeError，popup 里的操作全部静默失效。
  *    这里为缺失的命名空间补一套安全实现（优先用真实 `action`，否则 no-op）。
+ * 3. Safari 的 `icon.js` 还会在模块顶层读 `manifest.browser_action.default_icon[16]`
+ *    并要求匹配到尺寸后缀；这里不改上游，靠 manifest-overrides 保证字段齐全。
  */
 
 const ACTION_METHODS = [
@@ -31,15 +34,21 @@ const noopEvent = () => ({
 /** 原样返回事件对象，保证 `browserAction.onClicked.addListener` 之类调用不报错 */
 const ACTION_EVENTS = ['onClicked'];
 
-for (const ns of [globalThis.chrome, globalThis.browser]) {
-  if (!ns) continue;
-  let api = ns.action || ns.browserAction;
-  if (!api) {
-    // Safari MV2：两个命名空间都没有，补一套安全实现
-    api = ns.browserAction = { __proto__: null };
+safePatch('action-api', () => {
+  for (const ns of [globalThis.chrome, globalThis.browser]) {
+    if (!ns) continue;
+    let api = ns.action || ns.browserAction;
+    if (!api) {
+      // Safari MV2：两个命名空间都没有，补一套安全实现
+      api = { __proto__: null };
+      if (!trySet(ns, 'browserAction', api, 'browserAction')) continue;
+    }
+    const wrapped = wrapActionApi(api, ACTION_METHODS);
+    for (const key in wrapped) {
+      trySet(api, key, wrapped[key], `browserAction.${key}`);
+    }
+    for (const evt of ACTION_EVENTS) {
+      if (api[evt] === undefined) trySet(api, evt, noopEvent(), `browserAction.${evt}`);
+    }
   }
-  Object.assign(api, wrapActionApi(api, ACTION_METHODS));
-  for (const evt of ACTION_EVENTS) {
-    if (api[evt] === undefined) api[evt] = noopEvent();
-  }
-}
+});
